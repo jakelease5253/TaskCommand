@@ -84,11 +84,10 @@
             }, []);
 
             useEffect(() => {
-                const params = new URLSearchParams(window.location.search);
-                const code = params.get('code');
-                if (code) {
-                    acquireToken(code);
-                    window.history.replaceState({}, document.title, window.location.pathname);
+                // Check if there's a token in the URL hash (implicit flow)
+                const hash = window.location.hash;
+                if (hash && hash.includes('access_token')) {
+                    acquireToken();
                 }
             }, []);
 
@@ -139,34 +138,30 @@
             const handleLogin = () => {
                 const authUrl = `${MSAL_CONFIG.auth.authority}/oauth2/v2.0/authorize?` +
                     `client_id=${MSAL_CONFIG.auth.clientId}` +
-                    `&response_type=code` +
+                    `&response_type=token` +
                     `&redirect_uri=${encodeURIComponent(MSAL_CONFIG.auth.redirectUri)}` +
-                    `&response_mode=query` +
+                    `&response_mode=fragment` +
                     `&scope=${encodeURIComponent(GRAPH_SCOPES.join(' '))}` +
-                    `&state=12345`;
+                    `&state=12345` +
+                    `&nonce=${Date.now()}`;
                 window.location.href = authUrl;
             };
 
-            const acquireToken = async (code) => {
+            const acquireToken = async () => {
                 setLoading(true);
                 try {
-                    const response = await fetch(`${MSAL_CONFIG.auth.authority}/oauth2/v2.0/token`, {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                        body: new URLSearchParams({
-                            client_id: MSAL_CONFIG.auth.clientId,
-                            scope: GRAPH_SCOPES.join(' '),
-                            code: code,
-                            redirect_uri: MSAL_CONFIG.auth.redirectUri,
-                            grant_type: 'authorization_code'
-                        })
-                    });
-                    const data = await response.json();
-                    if (data.access_token) {
-                        setAccessToken(data.access_token);
+                    // Parse token from URL fragment
+                    const hash = window.location.hash.substring(1);
+                    const params = new URLSearchParams(hash);
+                    const token = params.get('access_token');
+                    
+                    if (token) {
+                        setAccessToken(token);
                         setIsAuthenticated(true);
+                        // Clean up URL
+                        window.history.replaceState({}, document.title, window.location.pathname);
                     } else {
-                        throw new Error('Failed to acquire token');
+                        throw new Error('No access token found in URL');
                     }
                 } catch (err) {
                     setError(err.message);

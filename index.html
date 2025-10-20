@@ -11,12 +11,9 @@
 </head>
 <body>
     <div id="root"></div>
-    
     <script type="text/babel">
         const { useState, useEffect } = React;
-        
         const REDIRECT_URI = 'https://blue-sand-0d6d8c00f.3.azurestaticapps.net/';
-        
         const MSAL_CONFIG = {
             auth: {
                 clientId: '8724797a-a121-4f6c-bc18-2cc72266a686',
@@ -24,118 +21,23 @@
                 redirectUri: REDIRECT_URI
             }
         };
-
         const GRAPH_SCOPES = ['Tasks.ReadWrite', 'Group.Read.All', 'User.Read'];
 
-        // Icons
-        const Play = () => (
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="5 3 19 12 5 21 5 3"></polygon>
-            </svg>
-        );
-
-        const Pause = () => (
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="6" y="4" width="4" height="16"></rect>
-                <rect x="14" y="4" width="4" height="16"></rect>
-            </svg>
-        );
-
-        const Square = () => (
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            </svg>
-        );
-
-        const Clock = () => (
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <polyline points="12 6 12 12 16 14"></polyline>
-            </svg>
-        );
-
-        const Calendar = () => (
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                <line x1="16" y1="2" x2="16" y2="6"></line>
-                <line x1="8" y1="2" x2="8" y2="6"></line>
-                <line x1="3" y1="10" x2="21" y2="10"></line>
-            </svg>
-        );
-
-        const Target = () => (
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <circle cx="12" cy="12" r="6"></circle>
-                <circle cx="12" cy="12" r="2"></circle>
-            </svg>
-        );
-
-        const RefreshCw = ({ className = '' }) => (
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-                <polyline points="23 4 23 10 17 10"></polyline>
-                <polyline points="1 20 1 14 7 14"></polyline>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-            </svg>
-        );
-
-        const LogOut = () => (
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                <polyline points="16 17 21 12 16 7"></polyline>
-                <line x1="21" y1="12" x2="9" y2="12"></line>
-            </svg>
-        );
-
-        const AlertCircle = () => (
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="8" x2="12" y2="12"></line>
-                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
-        );
-
-        const X = () => (
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-        );
-
-        const Check = () => (
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12"></polyline>
-            </svg>
-        );
-
-        const Plus = () => (
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-        );
-
-        const Folder = () => (
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-            </svg>
-        );
-
-        const Users = () => (
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                <circle cx="9" cy="7" r="4"></circle>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-            </svg>
-        );
-
-        const Edit = () => (
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-            </svg>
-        );
+        const Play = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>;
+        const Pause = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>;
+        const Square = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>;
+        const Clock = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>;
+        const Calendar = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>;
+        const Target = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>;
+        const RefreshCw = ({ className = '' }) => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>;
+        const LogOut = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>;
+        const AlertCircle = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>;
+        const X = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
+        const Check = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"></polyline></svg>;
+        const Plus = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>;
+        const Folder = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>;
+        const Users = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>;
+        const Edit = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>;
 
         function FocusTaskManager() {
             const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -143,26 +45,22 @@
             const [user, setUser] = useState(null);
             const [loading, setLoading] = useState(false);
             const [error, setError] = useState(null);
-            
             const [tasks, setTasks] = useState([]);
             const [plans, setPlans] = useState({});
             const [buckets, setBuckets] = useState({});
             const [userProfiles, setUserProfiles] = useState({});
             const [showNewTaskModal, setShowNewTaskModal] = useState(false);
             const [editingTask, setEditingTask] = useState(null);
-            
             const [focusTask, setFocusTask] = useState(null);
             const [focusStartTime, setFocusStartTime] = useState(null);
             const [focusElapsed, setFocusElapsed] = useState(0);
-            
             const [isWorkTimerRunning, setIsWorkTimerRunning] = useState(false);
             const [workStartTime, setWorkStartTime] = useState(null);
             const [workElapsed, setWorkElapsed] = useState(0);
 
-            // Save timer data to localStorage
             useEffect(() => {
                 if (tasks.length > 0) {
-                    const timerData = {
+                    localStorage.setItem('focusTaskTimerData', JSON.stringify({
                         tasks: tasks.map(t => ({
                             id: t.id,
                             totalFocusTime: t.totalFocusTime,
@@ -170,8 +68,7 @@
                             focusHistory: t.focusHistory,
                             workHistory: t.workHistory
                         }))
-                    };
-                    localStorage.setItem('focusTaskTimerData', JSON.stringify(timerData));
+                    }));
                 }
             }, [tasks]);
 
@@ -179,10 +76,7 @@
                 const encoder = new TextEncoder();
                 const data = encoder.encode(codeVerifier);
                 const hash = await crypto.subtle.digest('SHA-256', data);
-                return btoa(String.fromCharCode(...new Uint8Array(hash)))
-                    .replace(/\+/g, '-')
-                    .replace(/\//g, '_')
-                    .replace(/=/g, '');
+                return btoa(String.fromCharCode(...new Uint8Array(hash))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
             };
 
             const generateRandomString = (length) => {
@@ -196,18 +90,8 @@
                     setError(null);
                     const codeVerifier = generateRandomString(64);
                     const codeChallenge = await generateCodeChallenge(codeVerifier);
-                    
                     sessionStorage.setItem('code_verifier', codeVerifier);
-                    
-                    const authUrl = `${MSAL_CONFIG.auth.authority}/oauth2/v2.0/authorize?` +
-                        `client_id=${MSAL_CONFIG.auth.clientId}` +
-                        `&response_type=code` +
-                        `&redirect_uri=${encodeURIComponent(MSAL_CONFIG.auth.redirectUri)}` +
-                        `&response_mode=query` +
-                        `&scope=${encodeURIComponent(GRAPH_SCOPES.join(' '))}` +
-                        `&code_challenge=${codeChallenge}` +
-                        `&code_challenge_method=S256`;
-                    
+                    const authUrl = `${MSAL_CONFIG.auth.authority}/oauth2/v2.0/authorize?client_id=${MSAL_CONFIG.auth.clientId}&response_type=code&redirect_uri=${encodeURIComponent(MSAL_CONFIG.auth.redirectUri)}&response_mode=query&scope=${encodeURIComponent(GRAPH_SCOPES.join(' '))}&code_challenge=${codeChallenge}&code_challenge_method=S256`;
                     window.location.href = authUrl;
                 } catch (err) {
                     setError('Failed to initiate login: ' + err.message);
@@ -218,21 +102,16 @@
                 const urlParams = new URLSearchParams(window.location.search);
                 const code = urlParams.get('code');
                 const errorParam = urlParams.get('error');
-                
                 if (errorParam) {
                     setError(`Authentication error: ${errorParam}`);
                     return;
                 }
-                
                 if (code) {
                     try {
                         const codeVerifier = sessionStorage.getItem('code_verifier');
-                        
                         const tokenResponse = await fetch(`${MSAL_CONFIG.auth.authority}/oauth2/v2.0/token`, {
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/x-www-form-urlencoded',
-                            },
+                            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                             body: new URLSearchParams({
                                 client_id: MSAL_CONFIG.auth.clientId,
                                 scope: GRAPH_SCOPES.join(' '),
@@ -242,9 +121,7 @@
                                 code_verifier: codeVerifier
                             })
                         });
-                        
                         const tokenData = await tokenResponse.json();
-                        
                         if (tokenData.access_token) {
                             setAccessToken(tokenData.access_token);
                             setIsAuthenticated(true);
@@ -264,12 +141,9 @@
             const fetchUserProfile = async (token) => {
                 try {
                     const response = await fetch('https://graph.microsoft.com/v1.0/me', {
-                        headers: {
-                            'Authorization': `Bearer ${token}`
-                        }
+                        headers: {'Authorization': `Bearer ${token}`}
                     });
-                    const userData = await response.json();
-                    setUser(userData);
+                    setUser(await response.json());
                 } catch (err) {
                     console.error('Failed to fetch user profile:', err);
                 }
@@ -278,48 +152,32 @@
             const fetchPlannerTasks = async (token) => {
                 setLoading(true);
                 setError(null);
-                
                 try {
-                    const tasksResponse = await fetch(
-                        `https://graph.microsoft.com/v1.0/me/planner/tasks`,
-                        {
-                            headers: { 'Authorization': `Bearer ${token}` }
-                        }
-                    );
-                    
-                    if (!tasksResponse.ok) {
-                        throw new Error(`Failed to fetch tasks: ${tasksResponse.statusText}`);
-                    }
-                    
+                    const tasksResponse = await fetch('https://graph.microsoft.com/v1.0/me/planner/tasks', {
+                        headers: {'Authorization': `Bearer ${token}`}
+                    });
+                    if (!tasksResponse.ok) throw new Error(`Failed to fetch tasks: ${tasksResponse.statusText}`);
                     const tasksData = await tasksResponse.json();
-                    
                     const today = new Date();
                     today.setHours(0, 0, 0, 0);
-                    
                     const sevenDaysFromNow = new Date(today);
                     sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
-                    
-                    // Fetch plan and bucket details
                     const planIds = [...new Set(tasksData.value.map(t => t.planId))];
                     const plansMap = {};
                     const bucketsMap = {};
                     const userProfilesMap = {};
-                    
                     for (const planId of planIds) {
                         try {
-                            const planResponse = await fetch(
-                                `https://graph.microsoft.com/v1.0/planner/plans/${planId}`,
-                                { headers: { 'Authorization': `Bearer ${token}` } }
-                            );
+                            const planResponse = await fetch(`https://graph.microsoft.com/v1.0/planner/plans/${planId}`, {
+                                headers: {'Authorization': `Bearer ${token}`}
+                            });
                             if (planResponse.ok) {
                                 const planData = await planResponse.json();
                                 plansMap[planId] = planData.title;
                             }
-                            
-                            const bucketsResponse = await fetch(
-                                `https://graph.microsoft.com/v1.0/planner/plans/${planId}/buckets`,
-                                { headers: { 'Authorization': `Bearer ${token}` } }
-                            );
+                            const bucketsResponse = await fetch(`https://graph.microsoft.com/v1.0/planner/plans/${planId}/buckets`, {
+                                headers: {'Authorization': `Bearer ${token}`}
+                            });
                             if (bucketsResponse.ok) {
                                 const bucketsData = await bucketsResponse.json();
                                 bucketsData.value.forEach(bucket => {
@@ -330,58 +188,39 @@
                             console.error('Error fetching plan/bucket details:', err);
                         }
                     }
-                    
                     setPlans(plansMap);
                     setBuckets(bucketsMap);
-                    
-                    // Fetch user profiles for assignees
                     const allUserIds = new Set();
                     tasksData.value.forEach(task => {
                         if (task.assignments) {
                             Object.keys(task.assignments).forEach(userId => allUserIds.add(userId));
                         }
                     });
-                    
                     for (const userId of allUserIds) {
                         try {
-                            const userResponse = await fetch(
-                                `https://graph.microsoft.com/v1.0/users/${userId}`,
-                                { headers: { 'Authorization': `Bearer ${token}` } }
-                            );
+                            const userResponse = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}`, {
+                                headers: {'Authorization': `Bearer ${token}`}
+                            });
                             if (userResponse.ok) {
                                 const userData = await userResponse.json();
                                 userProfilesMap[userId] = userData.displayName || userData.userPrincipalName;
                             }
                         } catch (err) {
-                            console.error('Error fetching user profile:', err);
                             userProfilesMap[userId] = 'Unknown User';
                         }
                     }
-                    
                     setUserProfiles(userProfilesMap);
-                    
-                    // Fetch task details
-                    const enrichedTasks = await Promise.all(
-                        tasksData.value.map(async (task) => {
-                            try {
-                                const detailsResponse = await fetch(
-                                    `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`,
-                                    { headers: { 'Authorization': `Bearer ${token}` } }
-                                );
-                                const details = detailsResponse.ok ? await detailsResponse.json() : {};
-                                
-                                return {
-                                    ...task,
-                                    description: details.description || '',
-                                    details: details
-                                };
-                            } catch {
-                                return task;
-                            }
-                        })
-                    );
-                    
-                    // Load saved timer data
+                    const enrichedTasks = await Promise.all(tasksData.value.map(async (task) => {
+                        try {
+                            const detailsResponse = await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`, {
+                                headers: {'Authorization': `Bearer ${token}`}
+                            });
+                            const details = detailsResponse.ok ? await detailsResponse.json() : {};
+                            return {...task, description: details.description || '', details: details};
+                        } catch {
+                            return task;
+                        }
+                    }));
                     const savedTimerData = localStorage.getItem('focusTaskTimerData');
                     let savedTimers = {};
                     if (savedTimerData) {
@@ -399,7 +238,6 @@
                             console.error('Error loading timer data:', err);
                         }
                     }
-                    
                     const filteredTasks = enrichedTasks
                         .filter(task => {
                             if (!task.dueDateTime) return false;
@@ -416,12 +254,9 @@
                             workHistory: savedTimers[task.id]?.workHistory || []
                         }))
                         .sort((a, b) => new Date(a.dueDateTime) - new Date(b.dueDateTime));
-                    
                     setTasks(filteredTasks);
-                    
                 } catch (err) {
                     setError('Failed to load tasks from Planner: ' + err.message);
-                    console.error('Error fetching tasks:', err);
                 } finally {
                     setLoading(false);
                 }
@@ -431,22 +266,15 @@
                 try {
                     const task = tasks.find(t => t.id === taskId);
                     if (!task) return;
-                    
-                    const response = await fetch(
-                        `https://graph.microsoft.com/v1.0/planner/tasks/${taskId}`,
-                        {
-                            method: 'PATCH',
-                            headers: {
-                                'Authorization': `Bearer ${accessToken}`,
-                                'Content-Type': 'application/json',
-                                'If-Match': task['@odata.etag']
-                            },
-                            body: JSON.stringify({
-                                percentComplete: 100
-                            })
-                        }
-                    );
-                    
+                    const response = await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${taskId}`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json',
+                            'If-Match': task['@odata.etag']
+                        },
+                        body: JSON.stringify({percentComplete: 100})
+                    });
                     if (response.ok) {
                         setTasks(prev => prev.filter(t => t.id !== taskId));
                         if (focusTask && focusTask.id === taskId) {
@@ -461,9 +289,7 @@
             };
 
             const handleRefresh = () => {
-                if (accessToken) {
-                    fetchPlannerTasks(accessToken);
-                }
+                if (accessToken) fetchPlannerTasks(accessToken);
             };
 
             const handleLogout = () => {
@@ -475,10 +301,7 @@
                 sessionStorage.clear();
             };
 
-            useEffect(() => {
-                handleAuthCallback();
-            }, []);
-
+            useEffect(() => { handleAuthCallback(); }, []);
             useEffect(() => {
                 if (focusTask && focusStartTime) {
                     const interval = setInterval(() => {
@@ -501,27 +324,18 @@
                 if (focusTask) {
                     const endTime = Date.now();
                     const duration = focusElapsed;
-                    
                     setTasks(prev => prev.map(t => {
                         if (t.id === focusTask.id) {
                             return {
                                 ...t,
                                 totalFocusTime: t.totalFocusTime + duration,
-                                focusHistory: [...t.focusHistory, {
-                                    startTime: focusStartTime,
-                                    endTime,
-                                    duration
-                                }]
+                                focusHistory: [...t.focusHistory, {startTime: focusStartTime, endTime, duration}]
                             };
                         }
                         return t;
                     }));
                 }
-
-                if (isWorkTimerRunning) {
-                    handleStopWork();
-                }
-
+                if (isWorkTimerRunning) handleStopWork();
                 const newFocusTask = tasks.find(t => t.id === task.id);
                 setFocusTask(newFocusTask);
                 setFocusStartTime(Date.now());
@@ -533,27 +347,18 @@
                 if (focusTask) {
                     const endTime = Date.now();
                     const duration = focusElapsed;
-                    
                     setTasks(prev => prev.map(t => {
                         if (t.id === focusTask.id) {
                             return {
                                 ...t,
                                 totalFocusTime: t.totalFocusTime + duration,
-                                focusHistory: [...t.focusHistory, {
-                                    startTime: focusStartTime,
-                                    endTime,
-                                    duration
-                                }]
+                                focusHistory: [...t.focusHistory, {startTime: focusStartTime, endTime, duration}]
                             };
                         }
                         return t;
                     }));
                 }
-
-                if (isWorkTimerRunning) {
-                    handleStopWork();
-                }
-
+                if (isWorkTimerRunning) handleStopWork();
                 setFocusTask(null);
                 setFocusStartTime(null);
                 setFocusElapsed(0);
@@ -569,31 +374,23 @@
                 if (isWorkTimerRunning) {
                     const endTime = Date.now();
                     const duration = workElapsed;
-                    
                     setTasks(prev => prev.map(t => {
                         if (t.id === focusTask.id) {
                             return {
                                 ...t,
                                 totalActiveTime: t.totalActiveTime + duration,
-                                workHistory: [...t.workHistory, {
-                                    startTime: workStartTime,
-                                    endTime,
-                                    duration
-                                }]
+                                workHistory: [...t.workHistory, {startTime: workStartTime, endTime, duration}]
                             };
                         }
                         return t;
                     }));
-
                     setIsWorkTimerRunning(false);
                     setWorkStartTime(null);
                     setWorkElapsed(0);
                 }
             };
 
-            const handleStopWork = () => {
-                handlePauseWork();
-            };
+            const handleStopWork = () => { handlePauseWork(); };
 
             const formatTime = (seconds) => {
                 const h = Math.floor(seconds / 3600);
@@ -605,12 +402,7 @@
             const formatFullDate = (dateString) => {
                 if (!dateString) return 'No date';
                 const date = new Date(dateString);
-                return date.toLocaleDateString('en-US', { 
-                    weekday: 'short',
-                    month: 'short', 
-                    day: 'numeric',
-                    year: 'numeric'
-                });
+                return date.toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'});
             };
 
             const formatDateStatus = (dateString) => {
@@ -622,11 +414,9 @@
                 tomorrow.setDate(tomorrow.getDate() + 1);
                 const taskDate = new Date(date);
                 taskDate.setHours(0, 0, 0, 0);
-                
                 if (taskDate.getTime() < today.getTime()) return 'Overdue';
                 if (taskDate.getTime() === today.getTime()) return 'Due Today';
                 if (taskDate.getTime() === tomorrow.getTime()) return 'Due Tomorrow';
-                
                 const daysUntil = Math.ceil((taskDate - today) / (1000 * 60 * 60 * 24));
                 return `Due in ${daysUntil} days`;
             };
@@ -647,7 +437,6 @@
                 today.setHours(0, 0, 0, 0);
                 const taskDate = new Date(date);
                 taskDate.setHours(0, 0, 0, 0);
-                
                 if (taskDate.getTime() < today.getTime()) return 'text-red-600';
                 if (taskDate.getTime() === today.getTime()) return 'text-amber-600';
                 return 'text-slate-500';
@@ -657,27 +446,16 @@
                 return (
                     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-8">
                         <div className="bg-white rounded-2xl shadow-lg p-12 max-w-md w-full border border-slate-200">
-                            <div className="w-16 h-16 mx-auto mb-6 flex items-center justify-center">
-                                <Target />
-                            </div>
+                            <div className="w-16 h-16 mx-auto mb-6 flex items-center justify-center"><Target /></div>
                             <h1 className="text-3xl font-light text-slate-800 text-center mb-3">Focus Task Manager</h1>
-                            <p className="text-slate-600 text-center mb-8">
-                                Connect to Microsoft Planner to track your tasks and stay focused on what matters.
-                            </p>
+                            <p className="text-slate-600 text-center mb-8">Connect to Microsoft Planner to track your tasks and stay focused on what matters.</p>
                             {error && (
                                 <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-start gap-3">
-                                    <div className="flex-shrink-0 mt-0.5">
-                                        <AlertCircle />
-                                    </div>
+                                    <div className="flex-shrink-0 mt-0.5"><AlertCircle /></div>
                                     <p className="text-sm text-red-800">{error}</p>
                                 </div>
                             )}
-                            <button
-                                onClick={handleLogin}
-                                className="w-full bg-indigo-600 text-white px-6 py-4 rounded-xl hover:bg-indigo-700 transition-colors font-medium"
-                            >
-                                Sign in with Microsoft
-                            </button>
+                            <button onClick={handleLogin} className="w-full bg-indigo-600 text-white px-6 py-4 rounded-xl hover:bg-indigo-700 transition-colors font-medium">Sign in with Microsoft</button>
                         </div>
                     </div>
                 );
@@ -695,45 +473,17 @@
                                 <p className="text-slate-500 mt-1">Stay present. Work intentionally.</p>
                             </div>
                             <div className="flex items-center gap-3">
-                                {user && (
-                                    <span className="text-sm text-slate-600">
-                                        {user.displayName || user.userPrincipalName}
-                                    </span>
-                                )}
-                                <button
-                                    onClick={() => setShowNewTaskModal(true)}
-                                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors text-sm font-medium"
-                                >
-                                    <Plus />
-                                    New Task
-                                </button>
-                                <button
-                                    onClick={handleRefresh}
-                                    disabled={loading}
-                                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-colors text-sm font-medium text-slate-700"
-                                >
-                                    <RefreshCw className={loading ? 'animate-spin' : ''} />
-                                    Refresh
-                                </button>
-                                <button
-                                    onClick={handleLogout}
-                                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-colors text-sm font-medium text-slate-700"
-                                >
-                                    <LogOut />
-                                    Sign Out
-                                </button>
+                                {user && <span className="text-sm text-slate-600">{user.displayName || user.userPrincipalName}</span>}
+                                <button onClick={() => setShowNewTaskModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors text-sm font-medium"><Plus />New Task</button>
+                                <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-colors text-sm font-medium text-slate-700"><LogOut />Sign Out</button>
                             </div>
                         </header>
-
                         {error && (
                             <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-start gap-3">
-                                <div className="flex-shrink-0 mt-0.5">
-                                    <AlertCircle />
-                                </div>
+                                <div className="flex-shrink-0 mt-0.5"><AlertCircle /></div>
                                 <p className="text-sm text-red-800">{error}</p>
                             </div>
                         )}
-
                         {loading ? (
                             <div className="text-center py-12">
                                 <div className="w-8 h-8 mx-auto mb-4"><RefreshCw className="animate-spin" /></div>
@@ -741,9 +491,7 @@
                             </div>
                         ) : tasks.length === 0 ? (
                             <div className="bg-white rounded-2xl shadow-lg p-12 border border-slate-200 text-center">
-                                <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center text-slate-300">
-                                    <Target />
-                                </div>
+                                <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center text-slate-300"><Target /></div>
                                 <h2 className="text-2xl font-light text-slate-400 mb-2">No tasks found</h2>
                                 <p className="text-slate-500">You don't have any incomplete tasks due in the next 7 days.</p>
                             </div>
@@ -761,26 +509,11 @@
                                                     <h2 className="text-3xl font-light text-slate-800 mb-2">{currentFocusTask.title}</h2>
                                                 </div>
                                                 <div className="flex items-center gap-2">
-                                                    <button
-                                                        onClick={() => setEditingTask(currentFocusTask)}
-                                                        className="p-2 rounded-lg hover:bg-indigo-100 transition-colors text-indigo-600 hover:text-indigo-700"
-                                                        title="Edit task"
-                                                    >
-                                                        <Edit />
-                                                    </button>
-                                                    <button
-                                                        onClick={handleClearFocus}
-                                                        className="p-2 rounded-lg hover:bg-slate-100 transition-colors text-slate-500 hover:text-slate-700"
-                                                        title="Clear focus"
-                                                    >
-                                                        <X />
-                                                    </button>
-                                                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(currentFocusTask.priority)}`}>
-                                                        {currentFocusTask.priority}
-                                                    </span>
+                                                    <button onClick={() => setEditingTask(currentFocusTask)} className="p-2 rounded-lg hover:bg-indigo-100 transition-colors text-indigo-600 hover:text-indigo-700" title="Edit task"><Edit /></button>
+                                                    <button onClick={handleClearFocus} className="p-2 rounded-lg hover:bg-slate-100 transition-colors text-slate-500 hover:text-slate-700" title="Clear focus"><X /></button>
+                                                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(currentFocusTask.priority)}`}>{currentFocusTask.priority}</span>
                                                 </div>
                                             </div>
-
                                             <div className="bg-slate-50 rounded-xl p-6 mb-6 space-y-4">
                                                 {currentFocusTask.description && (
                                                     <div>
@@ -788,7 +521,6 @@
                                                         <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-wrap">{currentFocusTask.description}</p>
                                                     </div>
                                                 )}
-                                                
                                                 <div className="grid grid-cols-2 gap-4">
                                                     {currentFocusTask.startDateTime && (
                                                         <div>
@@ -798,21 +530,13 @@
                                                     )}
                                                     <div>
                                                         <h3 className="text-sm font-medium text-slate-700 mb-1">Due Date</h3>
-                                                        <p className={`text-sm font-medium ${getDateColor(currentFocusTask.dueDateTime)}`}>
-                                                            {formatFullDate(currentFocusTask.dueDateTime)}
-                                                        </p>
-                                                        <p className={`text-xs ${getDateColor(currentFocusTask.dueDateTime)}`}>
-                                                            {formatDateStatus(currentFocusTask.dueDateTime)}
-                                                        </p>
+                                                        <p className={`text-sm font-medium ${getDateColor(currentFocusTask.dueDateTime)}`}>{formatFullDate(currentFocusTask.dueDateTime)}</p>
+                                                        <p className={`text-xs ${getDateColor(currentFocusTask.dueDateTime)}`}>{formatDateStatus(currentFocusTask.dueDateTime)}</p>
                                                     </div>
                                                 </div>
-
                                                 <div className="grid grid-cols-2 gap-4">
                                                     <div>
-                                                        <h3 className="text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
-                                                            <Folder />
-                                                            Plan
-                                                        </h3>
+                                                        <h3 className="text-sm font-medium text-slate-700 mb-1 flex items-center gap-1"><Folder />Plan</h3>
                                                         <p className="text-slate-600 text-sm">{plans[currentFocusTask.planId] || 'Unknown'}</p>
                                                     </div>
                                                     <div>
@@ -820,134 +544,67 @@
                                                         <p className="text-slate-600 text-sm">{buckets[currentFocusTask.bucketId] || 'Unknown'}</p>
                                                     </div>
                                                 </div>
-
                                                 {currentFocusTask.assignments && Object.keys(currentFocusTask.assignments).length > 0 && (
                                                     <div>
-                                                        <h3 className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-1">
-                                                            <Users />
-                                                            Assigned To
-                                                        </h3>
+                                                        <h3 className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-1"><Users />Assigned To</h3>
                                                         <div className="space-y-1">
                                                             {Object.keys(currentFocusTask.assignments).map(userId => (
-                                                                <p key={userId} className="text-slate-600 text-sm">
-                                                                    {userProfiles[userId] || 'Loading...'}
-                                                                </p>
+                                                                <p key={userId} className="text-slate-600 text-sm">{userProfiles[userId] || 'Loading...'}</p>
                                                             ))}
                                                         </div>
                                                     </div>
                                                 )}
                                             </div>
-
                                             <div className="grid grid-cols-2 gap-4 mb-8">
                                                 <div className="bg-indigo-50 rounded-xl p-6">
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <Clock />
-                                                        <span className="text-sm font-medium text-indigo-900">Focus Time</span>
-                                                    </div>
-                                                    <div className="text-4xl font-light text-indigo-600 mb-1">
-                                                        {formatTime(currentFocusTask.totalFocusTime + focusElapsed)}
-                                                    </div>
+                                                    <div className="flex items-center gap-2 mb-2"><Clock /><span className="text-sm font-medium text-indigo-900">Focus Time</span></div>
+                                                    <div className="text-4xl font-light text-indigo-600 mb-1">{formatTime(currentFocusTask.totalFocusTime + focusElapsed)}</div>
                                                     <p className="text-xs text-indigo-600 opacity-70">Auto-tracked since focus</p>
                                                 </div>
-
                                                 <div className="bg-emerald-50 rounded-xl p-6">
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <Play />
-                                                        <span className="text-sm font-medium text-emerald-900">Active Work</span>
-                                                    </div>
-                                                    <div className="text-4xl font-light text-emerald-600 mb-1">
-                                                        {formatTime(currentFocusTask.totalActiveTime + workElapsed)}
-                                                    </div>
+                                                    <div className="flex items-center gap-2 mb-2"><Play /><span className="text-sm font-medium text-emerald-900">Active Work</span></div>
+                                                    <div className="text-4xl font-light text-emerald-600 mb-1">{formatTime(currentFocusTask.totalActiveTime + workElapsed)}</div>
                                                     <p className="text-xs text-emerald-600 opacity-70">Manual timer sessions</p>
                                                 </div>
                                             </div>
-
                                             <div className="flex gap-3">
                                                 {!isWorkTimerRunning ? (
-                                                    <button
-                                                        onClick={handleStartWork}
-                                                        className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 py-4 rounded-xl hover:bg-emerald-700 transition-colors font-medium"
-                                                    >
-                                                        <Play />
-                                                        Start Work Timer
-                                                    </button>
+                                                    <button onClick={handleStartWork} className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 py-4 rounded-xl hover:bg-emerald-700 transition-colors font-medium"><Play />Start Work Timer</button>
                                                 ) : (
                                                     <>
-                                                        <button
-                                                            onClick={handlePauseWork}
-                                                            className="flex-1 flex items-center justify-center gap-2 bg-amber-600 text-white px-6 py-4 rounded-xl hover:bg-amber-700 transition-colors font-medium"
-                                                        >
-                                                            <Pause />
-                                                            Pause
-                                                        </button>
-                                                        <button
-                                                            onClick={handleStopWork}
-                                                            className="flex-1 flex items-center justify-center gap-2 bg-slate-600 text-white px-6 py-4 rounded-xl hover:bg-slate-700 transition-colors font-medium"
-                                                        >
-                                                            <Square />
-                                                            Stop
-                                                        </button>
+                                                        <button onClick={handlePauseWork} className="flex-1 flex items-center justify-center gap-2 bg-amber-600 text-white px-6 py-4 rounded-xl hover:bg-amber-700 transition-colors font-medium"><Pause />Pause</button>
+                                                        <button onClick={handleStopWork} className="flex-1 flex items-center justify-center gap-2 bg-slate-600 text-white px-6 py-4 rounded-xl hover:bg-slate-700 transition-colors font-medium"><Square />Stop</button>
                                                     </>
                                                 )}
                                             </div>
                                         </div>
                                     ) : (
                                         <div className="bg-white rounded-2xl shadow-lg p-12 border border-slate-200 text-center">
-                                            <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center text-slate-300">
-                                                <Target />
-                                            </div>
+                                            <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center text-slate-300"><Target /></div>
                                             <h2 className="text-2xl font-light text-slate-400 mb-2">No task in focus</h2>
                                             <p className="text-slate-500">Select a task from your upcoming list to begin</p>
                                         </div>
                                     )}
                                 </div>
-
                                 <div className="lg:col-span-1">
                                     <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200">
-                                        <h3 className="text-lg font-medium text-slate-800 mb-4">
-                                            Upcoming Tasks ({upcomingTasks.length})
-                                        </h3>
+                                        <h3 className="text-lg font-medium text-slate-800 mb-4">Upcoming Tasks ({upcomingTasks.length})</h3>
                                         <div className="space-y-3 max-h-[600px] overflow-y-auto">
                                             {upcomingTasks.map(task => (
-                                                <div
-                                                    key={task.id}
-                                                    className="p-4 rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all"
-                                                >
+                                                <div key={task.id} className="p-4 rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all">
                                                     <div className="flex items-start justify-between mb-2">
-                                                        <h4 className="font-medium text-slate-800 flex-1 pr-2">
-                                                            {task.title}
-                                                        </h4>
+                                                        <h4 className="font-medium text-slate-800 flex-1 pr-2">{task.title}</h4>
                                                     </div>
-                                                    
                                                     <div className="space-y-2 text-xs mb-3">
                                                         <div className="flex items-center justify-between">
-                                                            <span className={`font-medium ${getDateColor(task.dueDateTime)}`}>
-                                                                {formatFullDate(task.dueDateTime)}
-                                                            </span>
-                                                            <span className={`px-2 py-1 rounded text-xs font-medium ${getDateColor(task.dueDateTime)} bg-opacity-10`}>
-                                                                {formatDateStatus(task.dueDateTime)}
-                                                            </span>
+                                                            <span className={`font-medium ${getDateColor(task.dueDateTime)}`}>{formatFullDate(task.dueDateTime)}</span>
+                                                            <span className={`px-2 py-1 rounded text-xs font-medium ${getDateColor(task.dueDateTime)} bg-opacity-10`}>{formatDateStatus(task.dueDateTime)}</span>
                                                         </div>
-                                                        <div className="flex items-center gap-1 text-slate-500">
-                                                            <Folder />
-                                                            <span>{plans[task.planId] || 'Unknown'}</span>
-                                                        </div>
+                                                        <div className="flex items-center gap-1 text-slate-500"><Folder /><span>{plans[task.planId] || 'Unknown'}</span></div>
                                                     </div>
-
                                                     <div className="flex gap-2">
-                                                        <button
-                                                            onClick={() => handleSetFocus(task)}
-                                                            className="flex-1 px-3 py-2 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                                                        >
-                                                            Set Focus
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleCompleteTask(task.id)}
-                                                            className="px-3 py-2 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center justify-center"
-                                                            title="Mark complete"
-                                                        >
-                                                            <Check />
-                                                        </button>
+                                                        <button onClick={() => handleSetFocus(task)} className="flex-1 px-3 py-2 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">Set Focus</button>
+                                                        <button onClick={() => handleCompleteTask(task.id)} className="px-3 py-2 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center justify-center" title="Mark complete"><Check /></button>
                                                     </div>
                                                 </div>
                                             ))}
@@ -956,34 +613,8 @@
                                 </div>
                             </div>
                         )}
-
-                        {showNewTaskModal && (
-                            <NewTaskModal
-                                accessToken={accessToken}
-                                plans={plans}
-                                buckets={buckets}
-                                onClose={() => setShowNewTaskModal(false)}
-                                onTaskCreated={() => {
-                                    setShowNewTaskModal(false);
-                                    handleRefresh();
-                                }}
-                            />
-                        )}
-
-                        {editingTask && (
-                            <EditTaskModal
-                                accessToken={accessToken}
-                                task={editingTask}
-                                plans={plans}
-                                buckets={buckets}
-                                userProfiles={userProfiles}
-                                onClose={() => setEditingTask(null)}
-                                onTaskUpdated={() => {
-                                    setEditingTask(null);
-                                    handleRefresh();
-                                }}
-                            />
-                        )}
+                        {showNewTaskModal && <NewTaskModal accessToken={accessToken} plans={plans} buckets={buckets} onClose={() => setShowNewTaskModal(false)} onTaskCreated={() => {setShowNewTaskModal(false);handleRefresh();}} />}
+                        {editingTask && <EditTaskModal accessToken={accessToken} task={editingTask} plans={plans} buckets={buckets} userProfiles={userProfiles} onClose={() => setEditingTask(null)} onTaskUpdated={() => {setEditingTask(null);handleRefresh();}} />}
                     </div>
                 </div>
             );
@@ -994,7 +625,7 @@
             const [description, setDescription] = useState(task.description || '');
             const [startDate, setStartDate] = useState(task.startDateTime ? task.startDateTime.split('T')[0] : '');
             const [dueDate, setDueDate] = useState(task.dueDateTime ? task.dueDateTime.split('T')[0] : '');
-            const [selectedPlan, setSelectedPlan] = useState(task.planId || '');
+            const [selectedPlan] = useState(task.planId || '');
             const [selectedBucket, setSelectedBucket] = useState(task.bucketId || '');
             const [availableBuckets, setAvailableBuckets] = useState([]);
             const [priority, setPriority] = useState(task.priority);
@@ -1003,24 +634,10 @@
 
             useEffect(() => {
                 if (selectedPlan) {
-                    const fetchBuckets = async () => {
-                        try {
-                            const response = await fetch(
-                                `https://graph.microsoft.com/v1.0/planner/plans/${selectedPlan}/buckets`,
-                                { headers: { 'Authorization': `Bearer ${accessToken}` } }
-                            );
-                            if (response.ok) {
-                                const data = await response.json();
-                                setAvailableBuckets(data.value);
-                                if (data.value.length > 0) {
-                                    setSelectedBucket(data.value[0].id);
-                                }
-                            }
-                        } catch (err) {
-                            console.error('Error fetching buckets:', err);
-                        }
-                    };
-                    fetchBuckets();
+                    fetch(`https://graph.microsoft.com/v1.0/planner/plans/${selectedPlan}/buckets`, {headers: {'Authorization': `Bearer ${accessToken}`}})
+                        .then(r => r.ok ? r.json() : null)
+                        .then(data => data && setAvailableBuckets(data.value))
+                        .catch(err => console.error('Error fetching buckets:', err));
                 }
             }, [selectedPlan, accessToken]);
 
@@ -1028,284 +645,28 @@
                 e.preventDefault();
                 setLoading(true);
                 setError(null);
-
                 try {
-                    if (!title || !selectedPlan || !selectedBucket) {
-                        throw new Error('Please fill in all required fields');
-                    }
-
-                    const taskData = {
-                        planId: selectedPlan,
-                        bucketId: selectedBucket,
-                        title: title
-                    };
-
-                    if (dueDate) {
-                        taskData.dueDateTime = new Date(dueDate).toISOString();
-                    }
-
-                    const priorityMap = { high: 1, medium: 5, low: 9 };
-                    taskData.priority = priorityMap[priority];
-
-                    const response = await fetch(
-                        'https://graph.microsoft.com/v1.0/planner/tasks',
-                        {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': `Bearer ${accessToken}`,
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify(taskData)
-                        }
-                    );
-
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.error?.message || 'Failed to create task');
-                    }
-
-                    const newTask = await response.json();
-
-                    if (description) {
-                        await fetch(
-                            `https://graph.microsoft.com/v1.0/planner/tasks/${newTask.id}/details`,
-                            {
-                                method: 'PATCH',
-                                headers: {
-                                    'Authorization': `Bearer ${accessToken}`,
-                                    'Content-Type': 'application/json',
-                                    'If-Match': newTask['@odata.etag']
-                                },
-                                body: JSON.stringify({
-                                    description: description
-                                })
-                            }
-                        );
-                    }
-
-                    onTaskCreated();
-                } catch (err) {
-                    setError(err.message);
-                } finally {
-                    setLoading(false);
-                }
-            };
-
-            return (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                        <div className="p-6 border-b border-slate-200">
-                            <div className="flex items-center justify-between">
-                                <h2 className="text-2xl font-light text-slate-800">Create New Task</h2>
-                                <button
-                                    onClick={onClose}
-                                    className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                                >
-                                    <X />
-                                </button>
-                            </div>
-                        </div>
-
-                        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                            {error && (
-                                <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-                                    <div className="flex-shrink-0 mt-0.5">
-                                        <AlertCircle />
-                                    </div>
-                                    <p className="text-sm text-red-800">{error}</p>
-                                </div>
-                            )}
-
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Task Title *
-                                </label>
-                                <input
-                                    type="text"
-                                    value={title}
-                                    onChange={(e) => setTitle(e.target.value)}
-                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                    placeholder="Enter task title"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Description
-                                </label>
-                                <textarea
-                                    value={description}
-                                    onChange={(e) => setDescription(e.target.value)}
-                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                    placeholder="Enter task description"
-                                    rows="3"
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                                        Plan *
-                                    </label>
-                                    <select
-                                        value={selectedPlan}
-                                        onChange={(e) => setSelectedPlan(e.target.value)}
-                                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                        required
-                                    >
-                                        <option value="">Select a plan</option>
-                                        {Object.entries(plans).map(([id, name]) => (
-                                            <option key={id} value={id}>{name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                                        Bucket *
-                                    </label>
-                                    <select
-                                        value={selectedBucket}
-                                        onChange={(e) => setSelectedBucket(e.target.value)}
-                                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                        required
-                                        disabled={!selectedPlan}
-                                    >
-                                        <option value="">Select a bucket</option>
-                                        {availableBuckets.map((bucket) => (
-                                            <option key={bucket.id} value={bucket.id}>{bucket.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                                        Due Date
-                                    </label>
-                                    <input
-                                        type="date"
-                                        value={dueDate}
-                                        onChange={(e) => setDueDate(e.target.value)}
-                                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                                        Priority
-                                    </label>
-                                    <select
-                                        value={priority}
-                                        onChange={(e) => setPriority(e.target.value)}
-                                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                    >
-                                        <option value="high">High</option>
-                                        <option value="medium">Medium</option>
-                                        <option value="low">Low</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="flex gap-3 pt-4">
-                                <button
-                                    type="button"
-                                    onClick={onClose}
-                                    className="flex-1 px-6 py-3 border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors font-medium"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={loading}
-                                    className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50"
-                                >
-                                    {loading ? 'Creating...' : 'Create Task'}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            );
-        }
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<FocusTaskManager />);
-    </script>
-</body>
-</html>
-                                const data = await response.json();
-                                setAvailableBuckets(data.value);
-                            }
-                        } catch (err) {
-                            console.error('Error fetching buckets:', err);
-                        }
-                    };
-                    fetchBuckets();
-                }
-            }, [selectedPlan, accessToken]);
-
-            const handleSubmit = async (e) => {
-                e.preventDefault();
-                setLoading(true);
-                setError(null);
-
-                try {
-                    const taskUpdateData = {
-                        title: title
-                    };
-
-                    if (startDate) {
-                        taskUpdateData.startDateTime = new Date(startDate).toISOString();
-                    }
-
-                    if (dueDate) {
-                        taskUpdateData.dueDateTime = new Date(dueDate).toISOString();
-                    }
-
+                    const taskUpdateData = {title};
+                    if (startDate) taskUpdateData.startDateTime = new Date(startDate).toISOString();
+                    if (dueDate) taskUpdateData.dueDateTime = new Date(dueDate).toISOString();
                     taskUpdateData.priority = priority === 'high' ? 1 : priority === 'medium' ? 5 : 9;
-
-                    if (selectedBucket !== task.bucketId) {
-                        taskUpdateData.bucketId = selectedBucket;
-                    }
-
-                    const taskResponse = await fetch(
-                        `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}`,
-                        {
-                            method: 'PATCH',
-                            headers: {
-                                'Authorization': `Bearer ${accessToken}`,
-                                'Content-Type': 'application/json',
-                                'If-Match': task['@odata.etag']
-                            },
-                            body: JSON.stringify(taskUpdateData)
-                        }
-                    );
-
+                    if (selectedBucket !== task.bucketId) taskUpdateData.bucketId = selectedBucket;
+                    const taskResponse = await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${task.id}`, {
+                        method: 'PATCH',
+                        headers: {'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json', 'If-Match': task['@odata.etag']},
+                        body: JSON.stringify(taskUpdateData)
+                    });
                     if (!taskResponse.ok) {
                         const errorData = await taskResponse.json();
                         throw new Error(errorData.error?.message || 'Failed to update task');
                     }
-
                     if (description !== task.description) {
-                        await fetch(
-                            `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`,
-                            {
-                                method: 'PATCH',
-                                headers: {
-                                    'Authorization': `Bearer ${accessToken}`,
-                                    'Content-Type': 'application/json',
-                                    'If-Match': task.details?.['@odata.etag'] || task['@odata.etag']
-                                },
-                                body: JSON.stringify({
-                                    description: description
-                                })
-                            }
-                        );
+                        await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`, {
+                            method: 'PATCH',
+                            headers: {'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json', 'If-Match': task.details?.['@odata.etag'] || task['@odata.etag']},
+                            body: JSON.stringify({description})
+                        });
                     }
-
                     onTaskUpdated();
                 } catch (err) {
                     setError(err.message);
@@ -1320,155 +681,67 @@
                         <div className="p-6 border-b border-slate-200">
                             <div className="flex items-center justify-between">
                                 <h2 className="text-2xl font-light text-slate-800">Edit Task</h2>
-                                <button
-                                    onClick={onClose}
-                                    className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                                >
-                                    <X />
-                                </button>
+                                <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><X /></button>
                             </div>
                         </div>
-
                         <form onSubmit={handleSubmit} className="p-6 space-y-4">
                             {error && (
                                 <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-                                    <div className="flex-shrink-0 mt-0.5">
-                                        <AlertCircle />
-                                    </div>
+                                    <div className="flex-shrink-0 mt-0.5"><AlertCircle /></div>
                                     <p className="text-sm text-red-800">{error}</p>
                                 </div>
                             )}
-
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Task Title *
-                                </label>
-                                <input
-                                    type="text"
-                                    value={title}
-                                    onChange={(e) => setTitle(e.target.value)}
-                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                    placeholder="Enter task title"
-                                    required
-                                />
+                                <label className="block text-sm font-medium text-slate-700 mb-2">Task Title *</label>
+                                <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="Enter task title" required />
                             </div>
-
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Description
-                                </label>
-                                <textarea
-                                    value={description}
-                                    onChange={(e) => setDescription(e.target.value)}
-                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                    placeholder="Enter task description"
-                                    rows="4"
-                                />
+                                <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>
+                                <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="Enter task description" rows="4" />
                             </div>
-
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                                        Plan
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={plans[selectedPlan] || 'Unknown'}
-                                        disabled
-                                        className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 text-slate-500"
-                                    />
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">Plan</label>
+                                    <input type="text" value={plans[selectedPlan] || 'Unknown'} disabled className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 text-slate-500" />
                                     <p className="text-xs text-slate-500 mt-1">Plan cannot be changed</p>
                                 </div>
-
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                                        Bucket *
-                                    </label>
-                                    <select
-                                        value={selectedBucket}
-                                        onChange={(e) => setSelectedBucket(e.target.value)}
-                                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                        required
-                                    >
-                                        {availableBuckets.map((bucket) => (
-                                            <option key={bucket.id} value={bucket.id}>{bucket.name}</option>
-                                        ))}
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">Bucket *</label>
+                                    <select value={selectedBucket} onChange={(e) => setSelectedBucket(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" required>
+                                        {availableBuckets.map((bucket) => (<option key={bucket.id} value={bucket.id}>{bucket.name}</option>))}
                                     </select>
                                 </div>
                             </div>
-
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                                        Start Date
-                                    </label>
-                                    <input
-                                        type="date"
-                                        value={startDate}
-                                        onChange={(e) => setStartDate(e.target.value)}
-                                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                    />
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">Start Date</label>
+                                    <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
                                 </div>
-
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                                        Due Date
-                                    </label>
-                                    <input
-                                        type="date"
-                                        value={dueDate}
-                                        onChange={(e) => setDueDate(e.target.value)}
-                                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                    />
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">Due Date</label>
+                                    <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
                                 </div>
                             </div>
-
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Priority
-                                </label>
-                                <select
-                                    value={priority}
-                                    onChange={(e) => setPriority(e.target.value)}
-                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                >
+                                <label className="block text-sm font-medium text-slate-700 mb-2">Priority</label>
+                                <select value={priority} onChange={(e) => setPriority(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
                                     <option value="high">High</option>
                                     <option value="medium">Medium</option>
                                     <option value="low">Low</option>
                                 </select>
                             </div>
-
                             {task.assignments && Object.keys(task.assignments).length > 0 && (
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                                        Current Assignees
-                                    </label>
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">Current Assignees</label>
                                     <div className="bg-slate-50 rounded-lg p-3 space-y-1">
-                                        {Object.keys(task.assignments).map(userId => (
-                                            <p key={userId} className="text-sm text-slate-600">
-                                                {userProfiles[userId] || 'Loading...'}
-                                            </p>
-                                        ))}
+                                        {Object.keys(task.assignments).map(userId => (<p key={userId} className="text-sm text-slate-600">{userProfiles[userId] || 'Loading...'}</p>))}
                                     </div>
                                     <p className="text-xs text-slate-500 mt-1">Managing assignees in Planner is recommended</p>
                                 </div>
                             )}
-
                             <div className="flex gap-3 pt-4">
-                                <button
-                                    type="button"
-                                    onClick={onClose}
-                                    className="flex-1 px-6 py-3 border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors font-medium"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={loading}
-                                    className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50"
-                                >
-                                    {loading ? 'Updating...' : 'Update Task'}
-                                </button>
+                                <button type="button" onClick={onClose} className="flex-1 px-6 py-3 border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors font-medium">Cancel</button>
+                                <button type="submit" disabled={loading} className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50">{loading ? 'Updating...' : 'Update Task'}</button>
                             </div>
                         </form>
                     </div>
@@ -1489,10 +762,119 @@
 
             useEffect(() => {
                 if (selectedPlan) {
-                    const fetchBuckets = async () => {
-                        try {
-                            const response = await fetch(
-                                `https://graph.microsoft.com/v1.0/planner/plans/${selectedPlan}/buckets`,
-                                { headers: { 'Authorization': `Bearer ${accessToken}` } }
-                            );
-                            if (response.ok) {
+                    fetch(`https://graph.microsoft.com/v1.0/planner/plans/${selectedPlan}/buckets`, {headers: {'Authorization': `Bearer ${accessToken}`}})
+                        .then(r => r.ok ? r.json() : null)
+                        .then(data => {
+                            if (data) {
+                                setAvailableBuckets(data.value);
+                                if (data.value.length > 0) setSelectedBucket(data.value[0].id);
+                            }
+                        })
+                        .catch(err => console.error('Error fetching buckets:', err));
+                }
+            }, [selectedPlan, accessToken]);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setLoading(true);
+                setError(null);
+                try {
+                    if (!title || !selectedPlan || !selectedBucket) throw new Error('Please fill in all required fields');
+                    const taskData = {planId: selectedPlan, bucketId: selectedBucket, title};
+                    if (dueDate) taskData.dueDateTime = new Date(dueDate).toISOString();
+                    taskData.priority = priority === 'high' ? 1 : priority === 'medium' ? 5 : 9;
+                    const response = await fetch('https://graph.microsoft.com/v1.0/planner/tasks', {
+                        method: 'POST',
+                        headers: {'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json'},
+                        body: JSON.stringify(taskData)
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error?.message || 'Failed to create task');
+                    }
+                    const newTask = await response.json();
+                    if (description) {
+                        await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${newTask.id}/details`, {
+                            method: 'PATCH',
+                            headers: {'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json', 'If-Match': newTask['@odata.etag']},
+                            body: JSON.stringify({description})
+                        });
+                    }
+                    onTaskCreated();
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="p-6 border-b border-slate-200">
+                            <div className="flex items-center justify-between">
+                                <h2 className="text-2xl font-light text-slate-800">Create New Task</h2>
+                                <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><X /></button>
+                            </div>
+                        </div>
+                        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                            {error && (
+                                <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                                    <div className="flex-shrink-0 mt-0.5"><AlertCircle /></div>
+                                    <p className="text-sm text-red-800">{error}</p>
+                                </div>
+                            )}
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">Task Title *</label>
+                                <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="Enter task title" required />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>
+                                <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="Enter task description" rows="3" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">Plan *</label>
+                                    <select value={selectedPlan} onChange={(e) => setSelectedPlan(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" required>
+                                        <option value="">Select a plan</option>
+                                        {Object.entries(plans).map(([id, name]) => (<option key={id} value={id}>{name}</option>))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">Bucket *</label>
+                                    <select value={selectedBucket} onChange={(e) => setSelectedBucket(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" required disabled={!selectedPlan}>
+                                        <option value="">Select a bucket</option>
+                                        {availableBuckets.map((bucket) => (<option key={bucket.id} value={bucket.id}>{bucket.name}</option>))}
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">Due Date</label>
+                                    <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">Priority</label>
+                                    <select value={priority} onChange={(e) => setPriority(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                                        <option value="high">High</option>
+                                        <option value="medium">Medium</option>
+                                        <option value="low">Low</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="flex gap-3 pt-4">
+                                <button type="button" onClick={onClose} className="flex-1 px-6 py-3 border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors font-medium">Cancel</button>
+                                <button type="submit" disabled={loading} className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50">{loading ? 'Creating...' : 'Create Task'}</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<FocusTaskManager />);
+    </script>
+</body>
+</html>Refresh} disabled={loading} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-colors text-sm font-medium text-slate-700"><RefreshCw className={loading ? 'animate-spin' : ''} />Refresh</button>
+                                <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-colors text-sm font-medium text-slate-700"><LogOut />Sign Out

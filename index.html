@@ -341,7 +341,15 @@
 
             const isOverdue = (task) => {
                 if (!task.dueDateTime) return false;
-                return new Date(task.dueDateTime) < new Date() && task.percentComplete < 100;
+                
+                // Parse the due date and get just the date part (ignoring time)
+                const dueDateStr = task.dueDateTime.split('T')[0]; // Gets YYYY-MM-DD
+                const dueDate = new Date(dueDateStr + 'T00:00:00');
+                
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                
+                return dueDate < today && task.percentComplete < 100;
             };
 
             const getDaysUntilDue = (task) => {

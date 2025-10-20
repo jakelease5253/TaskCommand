@@ -83,305 +83,164 @@
                 }
             }, []);
 
-            // Save completed tasks history
             useEffect(() => {
-                if (completedTasksHistory.length > 0) {
-                    localStorage.setItem('completedTasksHistory', JSON.stringify(completedTasksHistory));
+                const params = new URLSearchParams(window.location.search);
+                const code = params.get('code');
+                if (code) {
+                    acquireToken(code);
+                    window.history.replaceState({}, document.title, window.location.pathname);
                 }
-            }, [completedTasksHistory]);
+            }, []);
 
-            // Load custom order from localStorage
             useEffect(() => {
-                const savedOrder = localStorage.getItem('taskCustomOrder');
-                if (savedOrder) {
+                let interval;
+                if (focusTask && focusStartTime) {
+                    interval = setInterval(() => {
+                        setFocusElapsed(Math.floor((Date.now() - focusStartTime) / 1000));
+                    }, 1000);
+                }
+                return () => clearInterval(interval);
+            }, [focusTask, focusStartTime]);
+
+            useEffect(() => {
+                let interval;
+                if (isWorkTimerRunning && workStartTime) {
+                    interval = setInterval(() => {
+                        setWorkElapsed(Math.floor((Date.now() - workStartTime) / 1000));
+                    }, 1000);
+                }
+                return () => clearInterval(interval);
+            }, [isWorkTimerRunning, workStartTime]);
+
+            useEffect(() => {
+                if (isAuthenticated && accessToken) {
+                    fetchUserProfile();
+                    fetchAllTasks();
+                }
+            }, [isAuthenticated, accessToken]);
+
+            useEffect(() => {
+                const saved = localStorage.getItem('customTaskOrder');
+                if (saved) {
                     try {
-                        setCustomOrder(JSON.parse(savedOrder));
+                        setCustomOrder(JSON.parse(saved));
                     } catch (err) {
                         console.error('Error loading custom order:', err);
                     }
                 }
-                const savedSortMode = localStorage.getItem('taskSortMode');
-                if (savedSortMode) setSortMode(savedSortMode);
             }, []);
 
-            // Save custom order to localStorage
             useEffect(() => {
                 if (customOrder.length > 0) {
-                    localStorage.setItem('taskCustomOrder', JSON.stringify(customOrder));
+                    localStorage.setItem('customTaskOrder', JSON.stringify(customOrder));
                 }
             }, [customOrder]);
 
-            // Save sort mode to localStorage
-            useEffect(() => {
-                localStorage.setItem('taskSortMode', sortMode);
-            }, [sortMode]);
-
-            // Load date range preference
-            useEffect(() => {
-                const savedRange = localStorage.getItem('taskDateRange');
-                if (savedRange) setDateRange(savedRange);
-            }, []);
-
-            // Save date range preference
-            useEffect(() => {
-                localStorage.setItem('taskDateRange', dateRange);
-            }, [dateRange]);
-
-            useEffect(() => {
-                if (tasks.length > 0) {
-                    localStorage.setItem('focusTaskTimerData', JSON.stringify({
-                        tasks: tasks.map(t => ({
-                            id: t.id,
-                            totalFocusTime: t.totalFocusTime,
-                            totalActiveTime: t.totalActiveTime,
-                            focusHistory: t.focusHistory,
-                            workHistory: t.workHistory
-                        }))
-                    }));
-                }
-            }, [tasks]);
-
-            const generateCodeChallenge = async (codeVerifier) => {
-                const encoder = new TextEncoder();
-                const data = encoder.encode(codeVerifier);
-                const hash = await crypto.subtle.digest('SHA-256', data);
-                return btoa(String.fromCharCode(...new Uint8Array(hash))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+            const handleLogin = () => {
+                const authUrl = `${MSAL_CONFIG.auth.authority}/oauth2/v2.0/authorize?` +
+                    `client_id=${MSAL_CONFIG.auth.clientId}` +
+                    `&response_type=code` +
+                    `&redirect_uri=${encodeURIComponent(MSAL_CONFIG.auth.redirectUri)}` +
+                    `&response_mode=query` +
+                    `&scope=${encodeURIComponent(GRAPH_SCOPES.join(' '))}` +
+                    `&state=12345`;
+                window.location.href = authUrl;
             };
 
-            const generateRandomString = (length) => {
-                const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-                const values = crypto.getRandomValues(new Uint8Array(length));
-                return values.reduce((acc, x) => acc + possible[x % possible.length], '');
-            };
-
-            const handleLogin = async () => {
-                try {
-                    setError(null);
-                    const codeVerifier = generateRandomString(64);
-                    const codeChallenge = await generateCodeChallenge(codeVerifier);
-                    sessionStorage.setItem('code_verifier', codeVerifier);
-                    const authUrl = `${MSAL_CONFIG.auth.authority}/oauth2/v2.0/authorize?client_id=${MSAL_CONFIG.auth.clientId}&response_type=code&redirect_uri=${encodeURIComponent(MSAL_CONFIG.auth.redirectUri)}&response_mode=query&scope=${encodeURIComponent(GRAPH_SCOPES.join(' '))}&code_challenge=${codeChallenge}&code_challenge_method=S256`;
-                    window.location.href = authUrl;
-                } catch (err) {
-                    setError('Failed to initiate login: ' + err.message);
-                }
-            };
-
-            const handleAuthCallback = async () => {
-                const urlParams = new URLSearchParams(window.location.search);
-                const code = urlParams.get('code');
-                const errorParam = urlParams.get('error');
-                if (errorParam) {
-                    setError(`Authentication error: ${errorParam}`);
-                    return;
-                }
-                if (code) {
-                    try {
-                        const codeVerifier = sessionStorage.getItem('code_verifier');
-                        const tokenResponse = await fetch(`${MSAL_CONFIG.auth.authority}/oauth2/v2.0/token`, {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                            body: new URLSearchParams({
-                                client_id: MSAL_CONFIG.auth.clientId,
-                                scope: GRAPH_SCOPES.join(' '),
-                                code: code,
-                                redirect_uri: MSAL_CONFIG.auth.redirectUri,
-                                grant_type: 'authorization_code',
-                                code_verifier: codeVerifier
-                            })
-                        });
-                        const tokenData = await tokenResponse.json();
-                        if (tokenData.access_token) {
-                            setAccessToken(tokenData.access_token);
-                            setIsAuthenticated(true);
-                            sessionStorage.removeItem('code_verifier');
-                            window.history.replaceState({}, document.title, window.location.pathname);
-                            await fetchUserProfile(tokenData.access_token);
-                            await fetchPlannerTasks(tokenData.access_token);
-                        } else {
-                            throw new Error(tokenData.error_description || 'Failed to get access token');
-                        }
-                    } catch (err) {
-                        setError('Failed to complete authentication: ' + err.message);
-                    }
-                }
-            };
-
-            const fetchUserProfile = async (token) => {
-                try {
-                    const response = await fetch('https://graph.microsoft.com/v1.0/me', {
-                        headers: {'Authorization': `Bearer ${token}`}
-                    });
-                    setUser(await response.json());
-                } catch (err) {
-                    console.error('Failed to fetch user profile:', err);
-                }
-            };
-
-            const fetchPlannerTasks = async (token) => {
+            const acquireToken = async (code) => {
                 setLoading(true);
-                setError(null);
                 try {
-                    const tasksResponse = await fetch('https://graph.microsoft.com/v1.0/me/planner/tasks', {
-                        headers: {'Authorization': `Bearer ${token}`}
-                    });
-                    if (!tasksResponse.ok) throw new Error(`Failed to fetch tasks: ${tasksResponse.statusText}`);
-                    const tasksData = await tasksResponse.json();
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    
-                    let daysFromNow;
-                    switch(dateRange) {
-                        case 'today': daysFromNow = 0; break;
-                        case '3days': daysFromNow = 3; break;
-                        case '7days': daysFromNow = 7; break;
-                        case '14days': daysFromNow = 14; break;
-                        case '30days': daysFromNow = 30; break;
-                        case 'all': daysFromNow = 36500; break;
-                        default: daysFromNow = 7;
-                    }
-                    
-                    const targetDate = new Date(today);
-                    targetDate.setDate(targetDate.getDate() + daysFromNow);
-                    const planIds = [...new Set(tasksData.value.map(t => t.planId))];
-                    const plansMap = {};
-                    const bucketsMap = {};
-                    const userProfilesMap = {};
-                    for (const planId of planIds) {
-                        try {
-                            const planResponse = await fetch(`https://graph.microsoft.com/v1.0/planner/plans/${planId}`, {
-                                headers: {'Authorization': `Bearer ${token}`}
-                            });
-                            if (planResponse.ok) {
-                                const planData = await planResponse.json();
-                                plansMap[planId] = planData.title;
-                            }
-                            const bucketsResponse = await fetch(`https://graph.microsoft.com/v1.0/planner/plans/${planId}/buckets`, {
-                                headers: {'Authorization': `Bearer ${token}`}
-                            });
-                            if (bucketsResponse.ok) {
-                                const bucketsData = await bucketsResponse.json();
-                                bucketsData.value.forEach(bucket => {
-                                    bucketsMap[bucket.id] = bucket.name;
-                                });
-                            }
-                        } catch (err) {
-                            console.error('Error fetching plan/bucket details:', err);
-                        }
-                    }
-                    setPlans(plansMap);
-                    setBuckets(bucketsMap);
-                    const allUserIds = new Set();
-                    tasksData.value.forEach(task => {
-                        if (task.assignments) {
-                            Object.keys(task.assignments).forEach(userId => allUserIds.add(userId));
-                        }
-                    });
-                    for (const userId of allUserIds) {
-                        try {
-                            const userResponse = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}`, {
-                                headers: {'Authorization': `Bearer ${token}`}
-                            });
-                            if (userResponse.ok) {
-                                const userData = await userResponse.json();
-                                userProfilesMap[userId] = userData.displayName || userData.userPrincipalName;
-                            }
-                        } catch (err) {
-                            userProfilesMap[userId] = 'Unknown User';
-                        }
-                    }
-                    setUserProfiles(userProfilesMap);
-                    const enrichedTasks = await Promise.all(tasksData.value.map(async (task) => {
-                        try {
-                            const detailsResponse = await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`, {
-                                headers: {'Authorization': `Bearer ${token}`}
-                            });
-                            const details = detailsResponse.ok ? await detailsResponse.json() : {};
-                            return {...task, description: details.description || '', details: details};
-                        } catch {
-                            return task;
-                        }
-                    }));
-                    const savedTimerData = localStorage.getItem('focusTaskTimerData');
-                    let savedTimers = {};
-                    if (savedTimerData) {
-                        try {
-                            const data = JSON.parse(savedTimerData);
-                            data.tasks.forEach(t => {
-                                savedTimers[t.id] = {
-                                    totalFocusTime: t.totalFocusTime || 0,
-                                    totalActiveTime: t.totalActiveTime || 0,
-                                    focusHistory: t.focusHistory || [],
-                                    workHistory: t.workHistory || []
-                                };
-                            });
-                        } catch (err) {
-                            console.error('Error loading timer data:', err);
-                        }
-                    }
-                    const filteredTasks = enrichedTasks
-                        .filter(task => {
-                            if (!task.dueDateTime) return false;
-                            if (task.percentComplete === 100) return false;
-                            const dueDate = new Date(task.dueDateTime);
-                            return dueDate <= targetDate;
+                    const response = await fetch(`${MSAL_CONFIG.auth.authority}/oauth2/v2.0/token`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                        body: new URLSearchParams({
+                            client_id: MSAL_CONFIG.auth.clientId,
+                            scope: GRAPH_SCOPES.join(' '),
+                            code: code,
+                            redirect_uri: MSAL_CONFIG.auth.redirectUri,
+                            grant_type: 'authorization_code'
                         })
-                        .map(task => ({
-                            ...task,
-                            priority: task.priority <= 3 ? 'high' : task.priority <= 6 ? 'medium' : 'low',
-                            totalFocusTime: savedTimers[task.id]?.totalFocusTime || 0,
-                            totalActiveTime: savedTimers[task.id]?.totalActiveTime || 0,
-                            focusHistory: savedTimers[task.id]?.focusHistory || [],
-                            workHistory: savedTimers[task.id]?.workHistory || []
-                        }))
-                        .sort((a, b) => new Date(a.dueDateTime) - new Date(b.dueDateTime));
-                    setTasks(filteredTasks);
+                    });
+                    const data = await response.json();
+                    if (data.access_token) {
+                        setAccessToken(data.access_token);
+                        setIsAuthenticated(true);
+                    } else {
+                        throw new Error('Failed to acquire token');
+                    }
                 } catch (err) {
-                    setError('Failed to load tasks from Planner: ' + err.message);
+                    setError(err.message);
                 } finally {
                     setLoading(false);
                 }
             };
 
-            const handleCompleteTask = async (taskId) => {
+            const fetchUserProfile = async () => {
                 try {
-                    const task = tasks.find(t => t.id === taskId);
-                    if (!task) return;
-                    
-                    // Log completion
-                    const completionRecord = {
-                        taskId: task.id,
-                        taskTitle: task.title,
-                        completedAt: new Date().toISOString(),
-                        focusTime: task.totalFocusTime,
-                        activeTime: task.totalActiveTime
-                    };
-                    setCompletedTasksHistory(prev => [...prev, completionRecord]);
-                    
-                    const response = await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${taskId}`, {
-                        method: 'PATCH',
-                        headers: {
-                            'Authorization': `Bearer ${accessToken}`,
-                            'Content-Type': 'application/json',
-                            'If-Match': task['@odata.etag']
-                        },
-                        body: JSON.stringify({percentComplete: 100})
+                    const response = await fetch('https://graph.microsoft.com/v1.0/me', {
+                        headers: {'Authorization': `Bearer ${accessToken}`}
                     });
-                    if (response.ok) {
-                        setTasks(prev => prev.filter(t => t.id !== taskId));
-                        if (focusTask && focusTask.id === taskId) {
-                            handleClearFocus();
-                        }
-                    } else {
-                        throw new Error('Failed to complete task');
-                    }
+                    const data = await response.json();
+                    setUser(data);
                 } catch (err) {
-                    setError('Failed to mark task as complete: ' + err.message);
+                    console.error('Error fetching user profile:', err);
                 }
             };
 
-            const handleRefresh = () => {
-                if (accessToken) fetchPlannerTasks(accessToken);
+            const fetchAllTasks = async () => {
+                setLoading(true);
+                try {
+                    const groupsResponse = await fetch('https://graph.microsoft.com/v1.0/me/planner/plans', {
+                        headers: {'Authorization': `Bearer ${accessToken}`}
+                    });
+                    const groupsData = await groupsResponse.json();
+                    const plansMap = {};
+                    groupsData.value.forEach(plan => {
+                        plansMap[plan.id] = plan.title;
+                    });
+                    setPlans(plansMap);
+
+                    const bucketsMap = {};
+                    for (const planId of Object.keys(plansMap)) {
+                        const bucketsResponse = await fetch(`https://graph.microsoft.com/v1.0/planner/plans/${planId}/buckets`, {
+                            headers: {'Authorization': `Bearer ${accessToken}`}
+                        });
+                        const bucketsData = await bucketsResponse.json();
+                        bucketsMap[planId] = bucketsData.value;
+                    }
+                    setBuckets(bucketsMap);
+
+                    const tasksResponse = await fetch('https://graph.microsoft.com/v1.0/me/planner/tasks', {
+                        headers: {'Authorization': `Bearer ${accessToken}`}
+                    });
+                    const tasksData = await tasksResponse.json();
+                    setTasks(tasksData.value || []);
+
+                    const userIds = new Set();
+                    tasksData.value?.forEach(task => {
+                        if (task.assignments) {
+                            Object.keys(task.assignments).forEach(userId => userIds.add(userId));
+                        }
+                    });
+
+                    const profiles = {};
+                    for (const userId of userIds) {
+                        try {
+                            const userResponse = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}`, {
+                                headers: {'Authorization': `Bearer ${accessToken}`}
+                            });
+                            const userData = await userResponse.json();
+                            profiles[userId] = userData.displayName || userData.userPrincipalName || 'Unknown';
+                        } catch (err) {
+                            profiles[userId] = 'Unknown';
+                        }
+                    }
+                    setUserProfiles(profiles);
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                }
             };
 
             const handleLogout = () => {
@@ -389,584 +248,657 @@
                 setAccessToken(null);
                 setUser(null);
                 setTasks([]);
-                setFocusTask(null);
-                sessionStorage.clear();
+                setPlans({});
+                setBuckets({});
             };
 
-            useEffect(() => { handleAuthCallback(); }, []);
-            useEffect(() => {
-                if (focusTask && focusStartTime) {
-                    const interval = setInterval(() => {
-                        setFocusElapsed(Math.floor((Date.now() - focusStartTime) / 1000));
-                    }, 1000);
-                    return () => clearInterval(interval);
-                }
-            }, [focusTask, focusStartTime]);
+            const handleCompleteTask = async (taskId) => {
+                try {
+                    const task = tasks.find(t => t.id === taskId);
+                    if (!task) return;
 
-            useEffect(() => {
-                if (isWorkTimerRunning && workStartTime) {
-                    const interval = setInterval(() => {
-                        setWorkElapsed(Math.floor((Date.now() - workStartTime) / 1000));
-                    }, 1000);
-                    return () => clearInterval(interval);
-                }
-            }, [isWorkTimerRunning, workStartTime]);
+                    const detailsResponse = await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${taskId}/details`, {
+                        headers: {'Authorization': `Bearer ${accessToken}`}
+                    });
+                    const details = await detailsResponse.json();
 
-            const handleSetFocus = (task) => {
-                if (focusTask) {
-                    const endTime = Date.now();
-                    const duration = focusElapsed;
-                    setTasks(prev => prev.map(t => {
-                        if (t.id === focusTask.id) {
-                            return {
-                                ...t,
-                                totalFocusTime: t.totalFocusTime + duration,
-                                focusHistory: [...t.focusHistory, {startTime: focusStartTime, endTime, duration}]
-                            };
-                        }
-                        return t;
-                    }));
+                    await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${taskId}`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json',
+                            'If-Match': details['@odata.etag']
+                        },
+                        body: JSON.stringify({percentComplete: 100})
+                    });
+
+                    const completedTask = {
+                        ...task,
+                        completedDateTime: new Date().toISOString(),
+                        percentComplete: 100
+                    };
+                    const updatedHistory = [completedTask, ...completedTasksHistory];
+                    setCompletedTasksHistory(updatedHistory);
+                    localStorage.setItem('completedTasksHistory', JSON.stringify(updatedHistory));
+
+                    if (focusTask?.id === taskId) {
+                        setFocusTask(null);
+                        setFocusStartTime(null);
+                        setFocusElapsed(0);
+                    }
+
+                    await fetchAllTasks();
+                } catch (err) {
+                    setError(err.message);
                 }
-                if (isWorkTimerRunning) handleStopWork();
-                const newFocusTask = tasks.find(t => t.id === task.id);
-                setFocusTask(newFocusTask);
-                setFocusStartTime(Date.now());
-                setFocusElapsed(0);
-                setWorkElapsed(0);
             };
 
-            const handleClearFocus = () => {
-                if (focusTask) {
-                    const endTime = Date.now();
-                    const duration = focusElapsed;
-                    setTasks(prev => prev.map(t => {
-                        if (t.id === focusTask.id) {
-                            return {
-                                ...t,
-                                totalFocusTime: t.totalFocusTime + duration,
-                                focusHistory: [...t.focusHistory, {startTime: focusStartTime, endTime, duration}]
-                            };
-                        }
-                        return t;
-                    }));
+            const handleSetFocusTask = (task) => {
+                if (focusTask?.id === task.id) {
+                    setFocusTask(null);
+                    setFocusStartTime(null);
+                    setFocusElapsed(0);
+                } else {
+                    setFocusTask(task);
+                    setFocusStartTime(Date.now());
+                    setFocusElapsed(0);
                 }
-                if (isWorkTimerRunning) handleStopWork();
-                setFocusTask(null);
-                setFocusStartTime(null);
-                setFocusElapsed(0);
-                setWorkElapsed(0);
             };
 
-            const handleStartWork = () => {
-                setIsWorkTimerRunning(true);
-                setWorkStartTime(Date.now());
-            };
-
-            const handlePauseWork = () => {
+            const toggleWorkTimer = () => {
                 if (isWorkTimerRunning) {
-                    const endTime = Date.now();
-                    const duration = workElapsed;
-                    setTasks(prev => prev.map(t => {
-                        if (t.id === focusTask.id) {
-                            return {
-                                ...t,
-                                totalActiveTime: t.totalActiveTime + duration,
-                                workHistory: [...t.workHistory, {startTime: workStartTime, endTime, duration}]
-                            };
-                        }
-                        return t;
-                    }));
                     setIsWorkTimerRunning(false);
                     setWorkStartTime(null);
-                    setWorkElapsed(0);
+                } else {
+                    setIsWorkTimerRunning(true);
+                    setWorkStartTime(Date.now() - (workElapsed * 1000));
                 }
             };
 
-            const handleStopWork = () => { handlePauseWork(); };
+            const stopWorkTimer = () => {
+                setIsWorkTimerRunning(false);
+                setWorkStartTime(null);
+                setWorkElapsed(0);
+            };
 
             const formatTime = (seconds) => {
-                const h = Math.floor(seconds / 3600);
-                const m = Math.floor((seconds % 3600) / 60);
-                const s = seconds % 60;
-                return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+                const hours = Math.floor(seconds / 3600);
+                const minutes = Math.floor((seconds % 3600) / 60);
+                const secs = seconds % 60;
+                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
             };
 
-            const formatFullDate = (dateString) => {
-                if (!dateString) return 'No date';
-                const date = new Date(dateString);
-                return date.toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'});
+            const getBucketName = (task) => {
+                const planBuckets = buckets[task.planId] || [];
+                const bucket = planBuckets.find(b => b.id === task.bucketId);
+                return bucket ? bucket.name : 'Unknown Bucket';
             };
 
-            const formatDateStatus = (dateString) => {
-                if (!dateString) return 'No date';
-                const date = new Date(dateString);
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const tomorrow = new Date(today);
-                tomorrow.setDate(tomorrow.getDate() + 1);
-                const taskDate = new Date(date);
-                taskDate.setHours(0, 0, 0, 0);
-                if (taskDate.getTime() < today.getTime()) return 'Overdue';
-                if (taskDate.getTime() === today.getTime()) return 'Due Today';
-                if (taskDate.getTime() === tomorrow.getTime()) return 'Due Tomorrow';
-                const daysUntil = Math.ceil((taskDate - today) / (1000 * 60 * 60 * 24));
-                return `Due in ${daysUntil} days`;
+            const getPriorityLabel = (priority) => {
+                const labels = {1: 'Urgent', 3: 'Important', 5: 'Medium', 9: 'Low'};
+                return labels[priority] || 'Medium';
             };
 
             const getPriorityColor = (priority) => {
-                switch(priority) {
-                    case 'high': return 'text-red-600 bg-red-50';
-                    case 'medium': return 'text-amber-600 bg-amber-50';
-                    case 'low': return 'text-blue-600 bg-blue-50';
-                    default: return 'text-gray-600 bg-gray-50';
-                }
+                const colors = {1: 'bg-red-100 text-red-700', 3: 'bg-orange-100 text-orange-700', 5: 'bg-blue-100 text-blue-700', 9: 'bg-slate-100 text-slate-700'};
+                return colors[priority] || 'bg-blue-100 text-blue-700';
             };
 
-            const getDateColor = (dateString) => {
-                if (!dateString) return 'text-slate-500';
-                const date = new Date(dateString);
+            const isOverdue = (task) => {
+                if (!task.dueDateTime) return false;
+                return new Date(task.dueDateTime) < new Date() && task.percentComplete < 100;
+            };
+
+            const getDaysUntilDue = (task) => {
+                if (!task.dueDateTime) return null;
+                const dueDate = new Date(task.dueDateTime);
                 const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const taskDate = new Date(date);
-                taskDate.setHours(0, 0, 0, 0);
-                if (taskDate.getTime() < today.getTime()) return 'text-red-600';
-                if (taskDate.getTime() === today.getTime()) return 'text-amber-600';
-                return 'text-slate-500';
+                const diffTime = dueDate - today;
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                return diffDays;
             };
 
-            const getSortedTasks = () => {
-                const tasksToSort = tasks.filter(t => !focusTask || t.id !== focusTask.id);
+            const sortTasks = (tasksToSort) => {
+                const incompleteTasks = tasksToSort.filter(task => task.percentComplete < 100);
                 
-                switch(sortMode) {
+                switch (sortMode) {
                     case 'myOrder':
-                        return tasksToSort.sort((a, b) => {
-                            const aIndex = customOrder.indexOf(a.id);
-                            const bIndex = customOrder.indexOf(b.id);
-                            if (aIndex === -1 && bIndex === -1) return 0;
-                            if (aIndex === -1) return 1;
-                            if (bIndex === -1) return -1;
-                            return aIndex - bIndex;
+                        return incompleteTasks.sort((a, b) => {
+                            const indexA = customOrder.indexOf(a.id);
+                            const indexB = customOrder.indexOf(b.id);
+                            if (indexA === -1 && indexB === -1) return 0;
+                            if (indexA === -1) return 1;
+                            if (indexB === -1) return -1;
+                            return indexA - indexB;
                         });
-                    case 'dueDate':
-                        return tasksToSort.sort((a, b) => new Date(a.dueDateTime) - new Date(b.dueDateTime));
                     case 'priority':
-                        const priorityValues = {high: 1, medium: 2, low: 3};
-                        return tasksToSort.sort((a, b) => priorityValues[a.priority] - priorityValues[b.priority]);
+                        return incompleteTasks.sort((a, b) => (a.priority || 5) - (b.priority || 5));
+                    case 'dueDate':
+                        return incompleteTasks.sort((a, b) => {
+                            if (!a.dueDateTime && !b.dueDateTime) return 0;
+                            if (!a.dueDateTime) return 1;
+                            if (!b.dueDateTime) return -1;
+                            return new Date(a.dueDateTime) - new Date(b.dueDateTime);
+                        });
                     default:
-                        return tasksToSort;
+                        return incompleteTasks;
                 }
             };
 
-            const handleMoveTaskUp = (taskId) => {
-                const currentIndex = customOrder.indexOf(taskId);
-                if (currentIndex > 0) {
-                    const newOrder = [...customOrder];
-                    [newOrder[currentIndex - 1], newOrder[currentIndex]] = [newOrder[currentIndex], newOrder[currentIndex - 1]];
-                    setCustomOrder(newOrder);
-                }
-            };
-
-            const handleMoveTaskDown = (taskId) => {
-                const currentIndex = customOrder.indexOf(taskId);
-                if (currentIndex < customOrder.length - 1 && currentIndex !== -1) {
-                    const newOrder = [...customOrder];
-                    [newOrder[currentIndex], newOrder[currentIndex + 1]] = [newOrder[currentIndex + 1], newOrder[currentIndex]];
-                    setCustomOrder(newOrder);
-                }
-            };
-
-            const handleDragStart = (e, task) => {
+            const handleDragStart = (task) => {
                 setDraggedTask(task);
-                e.dataTransfer.effectAllowed = 'move';
             };
 
-            const handleDragOver = (e) => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-            };
-
-            const handleDrop = (e, targetTask) => {
+            const handleDragOver = (e, targetTask) => {
                 e.preventDefault();
                 if (!draggedTask || draggedTask.id === targetTask.id) return;
-                
+
+                const sortedTasks = sortTasks(tasks);
+                const draggedIndex = sortedTasks.findIndex(t => t.id === draggedTask.id);
+                const targetIndex = sortedTasks.findIndex(t => t.id === targetTask.id);
+
+                if (draggedIndex === -1 || targetIndex === -1) return;
+
                 const newOrder = [...customOrder];
-                const draggedIndex = newOrder.indexOf(draggedTask.id);
-                const targetIndex = newOrder.indexOf(targetTask.id);
-                
-                newOrder.splice(draggedIndex, 1);
-                newOrder.splice(targetIndex, 0, draggedTask.id);
-                
+                const draggedId = draggedTask.id;
+                const targetId = targetTask.id;
+
+                const currentDraggedIndex = newOrder.indexOf(draggedId);
+                if (currentDraggedIndex !== -1) {
+                    newOrder.splice(currentDraggedIndex, 1);
+                }
+
+                const currentTargetIndex = newOrder.indexOf(targetId);
+                if (currentTargetIndex !== -1) {
+                    newOrder.splice(currentTargetIndex, 0, draggedId);
+                } else {
+                    newOrder.push(draggedId);
+                }
+
                 setCustomOrder(newOrder);
-                setDraggedTask(null);
             };
 
             const handleDragEnd = () => {
                 setDraggedTask(null);
             };
 
-            // Dashboard Metrics Calculations
-            const getMetrics = () => {
+            const moveTaskUp = (task) => {
+                const sortedTasks = sortTasks(tasks);
+                const currentIndex = sortedTasks.findIndex(t => t.id === task.id);
+                if (currentIndex <= 0) return;
+
+                const newOrder = sortedTasks.map(t => t.id);
+                [newOrder[currentIndex], newOrder[currentIndex - 1]] = [newOrder[currentIndex - 1], newOrder[currentIndex]];
+                setCustomOrder(newOrder);
+            };
+
+            const moveTaskDown = (task) => {
+                const sortedTasks = sortTasks(tasks);
+                const currentIndex = sortedTasks.findIndex(t => t.id === task.id);
+                if (currentIndex === -1 || currentIndex >= sortedTasks.length - 1) return;
+
+                const newOrder = sortedTasks.map(t => t.id);
+                [newOrder[currentIndex], newOrder[currentIndex + 1]] = [newOrder[currentIndex + 1], newOrder[currentIndex]];
+                setCustomOrder(newOrder);
+            };
+
+            const getDateRangeStart = () => {
                 const now = new Date();
-                const today = new Date(now);
-                today.setHours(0, 0, 0, 0);
-                const todayEnd = new Date(today);
-                todayEnd.setHours(23, 59, 59, 999);
+                switch (dateRange) {
+                    case '7days':
+                        return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    case '30days':
+                        return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                    case '90days':
+                        return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+                    default:
+                        return new Date(0);
+                }
+            };
+
+            const getFilteredCompletedTasks = () => {
+                const startDate = getDateRangeStart();
+                return completedTasksHistory.filter(task => {
+                    const completedDate = new Date(task.completedDateTime);
+                    return completedDate >= startDate;
+                });
+            };
+
+            const calculateDashboardMetrics = () => {
+                const filteredTasks = getFilteredCompletedTasks();
+                const totalCompleted = filteredTasks.length;
                 
-                const weekAgo = new Date(today);
-                weekAgo.setDate(weekAgo.getDate() - 7);
-
-                // Tasks completed today
-                const completedToday = completedTasksHistory.filter(t => {
-                    const completedDate = new Date(t.completedAt);
-                    return completedDate >= today && completedDate <= todayEnd;
-                }).length;
-
-                // Tasks due today
-                const dueToday = tasks.filter(t => {
-                    const dueDate = new Date(t.dueDateTime);
-                    dueDate.setHours(0, 0, 0, 0);
-                    return dueDate.getTime() === today.getTime();
-                }).length;
-
-                // Overdue tasks
-                const overdueTasks = tasks.filter(t => {
-                    const dueDate = new Date(t.dueDateTime);
-                    dueDate.setHours(0, 0, 0, 0);
-                    return dueDate < today;
-                }).length;
-
-                // Tasks due tomorrow
-                const tomorrow = new Date(today);
-                tomorrow.setDate(tomorrow.getDate() + 1);
-                const dueTomorrow = tasks.filter(t => {
-                    const dueDate = new Date(t.dueDateTime);
-                    dueDate.setHours(0, 0, 0, 0);
-                    return dueDate.getTime() === tomorrow.getTime();
-                }).length;
-
-                // Total focus time today
-                const focusTimeToday = tasks.reduce((sum, task) => {
-                    const todayFocus = task.focusHistory.filter(h => {
-                        const sessionDate = new Date(h.startTime);
-                        return sessionDate >= today && sessionDate <= todayEnd;
-                    }).reduce((s, h) => s + h.duration, 0);
-                    return sum + todayFocus;
+                const totalFocusTime = filteredTasks.reduce((sum, task) => {
+                    return sum + (task.focusTime || 0);
                 }, 0);
 
-                // Total active work time today
-                const activeTimeToday = tasks.reduce((sum, task) => {
-                    const todayWork = task.workHistory.filter(h => {
-                        const sessionDate = new Date(h.startTime);
-                        return sessionDate >= today && sessionDate <= todayEnd;
-                    }).reduce((s, h) => s + h.duration, 0);
-                    return sum + todayWork;
-                }, 0);
+                const avgFocusTime = totalCompleted > 0 ? Math.round(totalFocusTime / totalCompleted / 60) : 0;
 
-                // Completed this week
-                const completedThisWeek = completedTasksHistory.filter(t => {
-                    const completedDate = new Date(t.completedAt);
-                    return completedDate >= weekAgo;
-                }).length;
+                const completionRate = tasks.length > 0 
+                    ? Math.round((totalCompleted / (totalCompleted + tasks.filter(t => t.percentComplete < 100).length)) * 100)
+                    : 0;
 
-                // Average per day (last 7 days)
-                const avgPerDay = (completedThisWeek / 7).toFixed(1);
-
-                // Completion rate today
-                const totalTodayTasks = completedToday + dueToday;
-                const completionRate = totalTodayTasks > 0 ? ((completedToday / totalTodayTasks) * 100).toFixed(0) : 0;
-
-                // Most focused task
-                const mostFocused = tasks.length > 0 ? tasks.reduce((prev, curr) => 
-                    curr.totalFocusTime > prev.totalFocusTime ? curr : prev
-                ) : null;
-
-                // Focus efficiency
-                const totalFocus = tasks.reduce((sum, t) => sum + t.totalFocusTime, 0);
-                const totalActive = tasks.reduce((sum, t) => sum + t.totalActiveTime, 0);
-                const efficiency = totalFocus > 0 ? ((totalActive / totalFocus) * 100).toFixed(0) : 0;
+                const currentStreak = calculateStreak();
 
                 return {
-                    completedToday,
-                    dueToday,
-                    overdueTasks,
-                    dueTomorrow,
-                    focusTimeToday,
-                    activeTimeToday,
-                    completedThisWeek,
-                    avgPerDay,
+                    totalCompleted,
+                    avgFocusTime,
                     completionRate,
-                    mostFocused,
-                    efficiency
+                    currentStreak
                 };
             };
 
-            const metrics = getMetrics();
+            const calculateStreak = () => {
+                if (completedTasksHistory.length === 0) return 0;
+
+                const sortedTasks = [...completedTasksHistory].sort((a, b) => 
+                    new Date(b.completedDateTime) - new Date(a.completedDateTime)
+                );
+
+                let streak = 0;
+                let currentDate = new Date();
+                currentDate.setHours(0, 0, 0, 0);
+
+                for (const task of sortedTasks) {
+                    const taskDate = new Date(task.completedDateTime);
+                    taskDate.setHours(0, 0, 0, 0);
+
+                    const daysDiff = Math.floor((currentDate - taskDate) / (1000 * 60 * 60 * 24));
+
+                    if (daysDiff === streak) {
+                        streak++;
+                    } else if (daysDiff > streak) {
+                        break;
+                    }
+                }
+
+                return streak;
+            };
+
+            const dashboardMetrics = calculateDashboardMetrics();
 
             if (!isAuthenticated) {
                 return (
-                    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-8">
-                        <div className="bg-white rounded-2xl shadow-lg p-12 max-w-md w-full border border-slate-200">
-                            <div className="w-16 h-16 mx-auto mb-6 flex items-center justify-center"><Target /></div>
-                            <h1 className="text-3xl font-light text-slate-800 text-center mb-3">Focus Task Manager</h1>
-                            <p className="text-slate-600 text-center mb-8">Connect to Microsoft Planner to track your tasks and stay focused on what matters.</p>
-                            {error && (
-                                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-start gap-3">
-                                    <div className="flex-shrink-0 mt-0.5"><AlertCircle /></div>
-                                    <p className="text-sm text-red-800">{error}</p>
+                    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">
+                        <div className="max-w-md w-full">
+                            <div className="text-center mb-8">
+                                <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl mb-6 shadow-lg">
+                                    <Target />
                                 </div>
-                            )}
-                            <button onClick={handleLogin} className="w-full bg-indigo-600 text-white px-6 py-4 rounded-xl hover:bg-indigo-700 transition-colors font-medium">Sign in with Microsoft</button>
+                                <h1 className="text-4xl font-light text-slate-800 mb-2">Focus Task Manager</h1>
+                                <p className="text-slate-600">Streamline your workflow with Microsoft Planner</p>
+                            </div>
+                            <div className="bg-white rounded-2xl shadow-xl p-8 border border-slate-100">
+                                <button onClick={handleLogin} disabled={loading} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-4 px-6 rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all font-medium text-lg shadow-lg hover:shadow-xl disabled:opacity-50">
+                                    {loading ? 'Signing In...' : 'Sign in with Microsoft'}
+                                </button>
+                                <p className="text-xs text-slate-500 text-center mt-4">Secure authentication via Microsoft</p>
+                            </div>
                         </div>
                     </div>
                 );
             }
 
-            const currentFocusTask = focusTask ? tasks.find(t => t.id === focusTask.id) : null;
-            const upcomingTasks = getSortedTasks();
+            const sortedTasks = sortTasks(tasks);
 
             return (
-                <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-8">
-                    <div className="max-w-7xl mx-auto">
-                        <header className="mb-8 flex items-center justify-between">
-                            <div>
-                                <h1 className="text-3xl font-light text-slate-800">Focus</h1>
-                                <p className="text-slate-500 mt-1">Stay present. Work intentionally.</p>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                {user && <span className="text-sm text-slate-600">{user.displayName || user.userPrincipalName}</span>}
-                                <button onClick={() => setShowNewTaskModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors text-sm font-medium"><Plus />New Task</button>
-                                <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-colors text-sm font-medium text-slate-700"><LogOut />Sign Out</button>
-                            </div>
-                        </header>
-                        {error && (
-                            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-start gap-3">
-                                <div className="flex-shrink-0 mt-0.5"><AlertCircle /></div>
-                                <p className="text-sm text-red-800">{error}</p>
-                            </div>
-                        )}
-                        {loading ? (
-                            <div className="text-center py-12">
-                                <div className="w-8 h-8 mx-auto mb-4"><RefreshCw className="animate-spin" /></div>
-                                <p className="text-slate-600">Loading your tasks from Microsoft Planner...</p>
-                            </div>
-                        ) : tasks.length === 0 ? (
-                            <div className="bg-white rounded-2xl shadow-lg p-12 border border-slate-200 text-center">
-                                <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center text-slate-300"><Target /></div>
-                                <h2 className="text-2xl font-light text-slate-400 mb-2">No tasks found</h2>
-                                <p className="text-slate-500">You don't have any incomplete tasks due in the next 7 days.</p>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                <div className="lg:col-span-2">
-                                    {currentFocusTask ? (
-                                        <div className="bg-white rounded-2xl shadow-lg p-8 border border-slate-200">
-                                            <div className="flex items-start justify-between mb-6">
-                                                <div className="flex-1">
-                                                    <div className="flex items-center gap-2 mb-3">
-                                                        <Target />
-                                                        <span className="text-sm font-medium text-indigo-600 uppercase tracking-wide">Current Focus</span>
-                                                    </div>
-                                                    <h2 className="text-3xl font-light text-slate-800 mb-2">{currentFocusTask.title}</h2>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <button onClick={() => setEditingTask(currentFocusTask)} className="p-2 rounded-lg hover:bg-indigo-100 transition-colors text-indigo-600 hover:text-indigo-700" title="Edit task"><Edit /></button>
-                                                    <button onClick={handleClearFocus} className="p-2 rounded-lg hover:bg-slate-100 transition-colors text-slate-500 hover:text-slate-700" title="Clear focus"><X /></button>
-                                                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(currentFocusTask.priority)}`}>{currentFocusTask.priority}</span>
-                                                </div>
-                                            </div>
-                                            <div className="bg-slate-50 rounded-xl p-6 mb-6 space-y-4">
-                                                {currentFocusTask.description && (
-                                                    <div>
-                                                        <h3 className="text-sm font-medium text-slate-700 mb-2">Description</h3>
-                                                        <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-wrap">{currentFocusTask.description}</p>
-                                                    </div>
-                                                )}
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    {currentFocusTask.startDateTime && (
-                                                        <div>
-                                                            <h3 className="text-sm font-medium text-slate-700 mb-1">Start Date</h3>
-                                                            <p className="text-slate-600 text-sm">{formatFullDate(currentFocusTask.startDateTime)}</p>
-                                                        </div>
-                                                    )}
-                                                    <div>
-                                                        <h3 className="text-sm font-medium text-slate-700 mb-1">Due Date</h3>
-                                                        <p className={`text-sm font-medium ${getDateColor(currentFocusTask.dueDateTime)}`}>{formatFullDate(currentFocusTask.dueDateTime)}</p>
-                                                        <p className={`text-xs ${getDateColor(currentFocusTask.dueDateTime)}`}>{formatDateStatus(currentFocusTask.dueDateTime)}</p>
-                                                    </div>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div>
-                                                        <h3 className="text-sm font-medium text-slate-700 mb-1 flex items-center gap-1"><Folder />Plan</h3>
-                                                        <p className="text-slate-600 text-sm">{plans[currentFocusTask.planId] || 'Unknown'}</p>
-                                                    </div>
-                                                    <div>
-                                                        <h3 className="text-sm font-medium text-slate-700 mb-1">Bucket</h3>
-                                                        <p className="text-slate-600 text-sm">{buckets[currentFocusTask.bucketId] || 'Unknown'}</p>
-                                                    </div>
-                                                </div>
-                                                {currentFocusTask.assignments && Object.keys(currentFocusTask.assignments).length > 0 && (
-                                                    <div>
-                                                        <h3 className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-1"><Users />Assigned To</h3>
-                                                        <div className="space-y-1">
-                                                            {Object.keys(currentFocusTask.assignments).map(userId => (
-                                                                <p key={userId} className="text-slate-600 text-sm">{userProfiles[userId] || 'Loading...'}</p>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-4 mb-8">
-                                                <div className="bg-indigo-50 rounded-xl p-6">
-                                                    <div className="flex items-center gap-2 mb-2"><Clock /><span className="text-sm font-medium text-indigo-900">Focus Time</span></div>
-                                                    <div className="text-4xl font-light text-indigo-600 mb-1">{formatTime(currentFocusTask.totalFocusTime + focusElapsed)}</div>
-                                                    <p className="text-xs text-indigo-600 opacity-70">Auto-tracked since focus</p>
-                                                </div>
-                                                <div className="bg-emerald-50 rounded-xl p-6">
-                                                    <div className="flex items-center gap-2 mb-2"><Play /><span className="text-sm font-medium text-emerald-900">Active Work</span></div>
-                                                    <div className="text-4xl font-light text-emerald-600 mb-1">{formatTime(currentFocusTask.totalActiveTime + workElapsed)}</div>
-                                                    <p className="text-xs text-emerald-600 opacity-70">Manual timer sessions</p>
-                                                </div>
-                                            </div>
-                                            <div className="flex gap-3">
-                                                {!isWorkTimerRunning ? (
-                                                    <button onClick={handleStartWork} className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 py-4 rounded-xl hover:bg-emerald-700 transition-colors font-medium"><Play />Start Work Timer</button>
-                                                ) : (
-                                                    <>
-                                                        <button onClick={handlePauseWork} className="flex-1 flex items-center justify-center gap-2 bg-amber-600 text-white px-6 py-4 rounded-xl hover:bg-amber-700 transition-colors font-medium"><Pause />Pause</button>
-                                                        <button onClick={handleStopWork} className="flex-1 flex items-center justify-center gap-2 bg-slate-600 text-white px-6 py-4 rounded-xl hover:bg-slate-700 transition-colors font-medium"><Square />Stop</button>
-                                                    </>
-                                                )}
-                                            </div>
+                <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+                    <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-md">
+                                            <Target />
                                         </div>
-                                    ) : (
-                                        <div className="bg-white rounded-2xl shadow-lg p-12 border border-slate-200 text-center">
-                                            <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center text-slate-300"><Target /></div>
-                                            <h2 className="text-2xl font-light text-slate-400 mb-2">No task in focus</h2>
-                                            <p className="text-slate-500">Select a task from your upcoming list to begin</p>
-                                        </div>
+                                        <h1 className="text-2xl font-light text-slate-800">Focus Task Manager</h1>
+                                    </div>
+                                    {user && (
+                                        <span className="text-sm text-slate-600 hidden sm:inline">Welcome, {user.displayName}</span>
                                     )}
                                 </div>
-                                <div className="lg:col-span-1">
-                                    <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200 h-full flex flex-col">
-                                        <div className="flex items-center justify-between mb-4">
-                                            <h3 className="text-lg font-medium text-slate-800">Upcoming Tasks ({upcomingTasks.length})</h3>
-                                            <select value={sortMode} onChange={(e) => setSortMode(e.target.value)} className="text-xs px-2 py-1 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
-                                                <option value="myOrder">My Order</option>
-                                                <option value="dueDate">Due Date</option>
-                                                <option value="priority">Priority</option>
-                                            </select>
+                                <div className="flex items-center gap-3">
+                                    <button 
+                                        onClick={() => setShowDashboard(!showDashboard)}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
+                                            showDashboard 
+                                                ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' 
+                                                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        <BarChart />
+                                        Dashboard
+                                    </button>
+                                    <button onClick={fetchAllTasks} disabled={loading} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-colors text-sm font-medium text-slate-700">
+                                        <RefreshCw className={loading ? 'animate-spin' : ''} />
+                                        Refresh
+                                    </button>
+                                    <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-colors text-sm font-medium text-slate-700">
+                                        <LogOut />
+                                        Sign Out
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                        {error && (
+                            <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+                                <div className="flex-shrink-0 mt-0.5"><AlertCircle /></div>
+                                <div className="flex-1">
+                                    <h3 className="text-sm font-medium text-red-800 mb-1">Error</h3>
+                                    <p className="text-sm text-red-700">{error}</p>
+                                </div>
+                                <button onClick={() => setError(null)} className="flex-shrink-0 text-red-400 hover:text-red-600">
+                                    <X />
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Dashboard Section */}
+                        {showDashboard && (
+                            <div className="mb-8">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 className="text-xl font-light text-slate-800">Performance Dashboard</h2>
+                                    <select 
+                                        value={dateRange} 
+                                        onChange={(e) => setDateRange(e.target.value)}
+                                        className="px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+                                    >
+                                        <option value="7days">Last 7 Days</option>
+                                        <option value="30days">Last 30 Days</option>
+                                        <option value="90days">Last 90 Days</option>
+                                        <option value="all">All Time</option>
+                                    </select>
+                                </div>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-sm font-medium text-slate-600">Tasks Completed</span>
+                                            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                                                <Check />
+                                            </div>
                                         </div>
-                                        <div className="space-y-3 overflow-y-auto flex-1" style={{maxHeight: 'calc(100vh - 300px)'}}>
-                                            {upcomingTasks.map((task, index) => (
-                                                <div 
-                                                    key={task.id} 
-                                                    draggable={sortMode === 'myOrder'}
-                                                    onDragStart={(e) => handleDragStart(e, task)}
-                                                    onDragOver={handleDragOver}
-                                                    onDrop={(e) => handleDrop(e, task)}
-                                                    onDragEnd={handleDragEnd}
-                                                    className={`p-4 rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all ${sortMode === 'myOrder' ? 'cursor-move' : ''} ${draggedTask?.id === task.id ? 'opacity-50' : ''}`}
-                                                >
-                                                    <div className="flex items-start gap-2">
-                                                        {sortMode === 'myOrder' && (
-                                                            <div className="flex flex-col gap-1 mt-1">
-                                                                <button 
-                                                                    onClick={() => handleMoveTaskUp(task.id)}
-                                                                    disabled={index === 0}
-                                                                    className="p-1 hover:bg-slate-200 rounded disabled:opacity-30 disabled:cursor-not-allowed"
-                                                                    title="Move up"
-                                                                >
-                                                                    <ChevronUp />
-                                                                </button>
-                                                                <div className="text-slate-400"><GripVertical /></div>
-                                                                <button 
-                                                                    onClick={() => handleMoveTaskDown(task.id)}
-                                                                    disabled={index === upcomingTasks.length - 1}
-                                                                    className="p-1 hover:bg-slate-200 rounded disabled:opacity-30 disabled:cursor-not-allowed"
-                                                                    title="Move down"
-                                                                >
-                                                                    <ChevronDown />
-                                                                </button>
-                                                            </div>
-                                                        )}
-                                                        <div className="flex-1">
-                                                            <div className="flex items-start justify-between mb-2">
-                                                                <h4 className="font-medium text-slate-800 flex-1 pr-2">{task.title}</h4>
-                                                            </div>
-                                                            <div className="space-y-2 text-xs mb-3">
-                                                                <div className="flex items-center justify-between">
-                                                                    <span className={`font-medium ${getDateColor(task.dueDateTime)}`}>{formatFullDate(task.dueDateTime)}</span>
-                                                                    <span className={`px-2 py-1 rounded text-xs font-medium ${getDateColor(task.dueDateTime)} bg-opacity-10`}>{formatDateStatus(task.dueDateTime)}</span>
-                                                                </div>
-                                                                <div className="flex items-center gap-1 text-slate-500"><Folder /><span>{plans[task.planId] || 'Unknown'}</span></div>
-                                                            </div>
-                                                            <div className="flex gap-2">
-                                                                <button onClick={() => handleSetFocus(task)} className="flex-1 px-3 py-2 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">Set Focus</button>
-                                                                <button onClick={() => handleCompleteTask(task.id)} className="px-3 py-2 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center justify-center" title="Mark complete"><Check /></button>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
+                                        <div className="text-3xl font-bold text-slate-800">{dashboardMetrics.totalCompleted}</div>
+                                        <p className="text-xs text-slate-500 mt-1">in selected period</p>
+                                    </div>
+
+                                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-sm font-medium text-slate-600">Avg Focus Time</span>
+                                            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                                <Clock />
+                                            </div>
                                         </div>
+                                        <div className="text-3xl font-bold text-slate-800">{dashboardMetrics.avgFocusTime}</div>
+                                        <p className="text-xs text-slate-500 mt-1">minutes per task</p>
+                                    </div>
+
+                                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-sm font-medium text-slate-600">Completion Rate</span>
+                                            <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                                                <TrendingUp />
+                                            </div>
+                                        </div>
+                                        <div className="text-3xl font-bold text-slate-800">{dashboardMetrics.completionRate}%</div>
+                                        <p className="text-xs text-slate-500 mt-1">of total tasks</p>
+                                    </div>
+
+                                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-sm font-medium text-slate-600">Current Streak</span>
+                                            <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                                                <Zap />
+                                            </div>
+                                        </div>
+                                        <div className="text-3xl font-bold text-slate-800">{dashboardMetrics.currentStreak}</div>
+                                        <p className="text-xs text-slate-500 mt-1">consecutive days</p>
                                     </div>
                                 </div>
                             </div>
                         )}
-                        {showNewTaskModal && <NewTaskModal accessToken={accessToken} plans={plans} buckets={buckets} onClose={() => setShowNewTaskModal(false)} onTaskCreated={() => {setShowNewTaskModal(false);handleRefresh();}} />}
-                        {editingTask && <EditTaskModal accessToken={accessToken} task={editingTask} plans={plans} buckets={buckets} userProfiles={userProfiles} onClose={() => setEditingTask(null)} onTaskUpdated={() => {setEditingTask(null);handleRefresh();}} />}
-                    </div>
+
+                        {/* Work Timer */}
+                        <div className="mb-6 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl shadow-lg p-6 text-white">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <Clock />
+                                    <div>
+                                        <h3 className="text-lg font-medium">Work Session Timer</h3>
+                                        <p className="text-indigo-100 text-sm">Track your total work time today</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <div className="text-3xl font-mono font-bold">{formatTime(workElapsed)}</div>
+                                    <div className="flex gap-2">
+                                        <button onClick={toggleWorkTimer} className="p-3 bg-white/20 hover:bg-white/30 rounded-xl transition-colors backdrop-blur-sm">
+                                            {isWorkTimerRunning ? <Pause /> : <Play />}
+                                        </button>
+                                        <button onClick={stopWorkTimer} className="p-3 bg-white/20 hover:bg-white/30 rounded-xl transition-colors backdrop-blur-sm">
+                                            <Square />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Focus Task */}
+                        {focusTask && (
+                            <div className="mb-6 bg-white rounded-2xl shadow-lg border-2 border-indigo-500 p-6">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <div className="w-3 h-3 bg-indigo-500 rounded-full animate-pulse"></div>
+                                            <h3 className="text-lg font-medium text-slate-800">Current Focus Task</h3>
+                                        </div>
+                                        <h4 className="text-2xl font-light text-slate-900 mb-2">{focusTask.title}</h4>
+                                        <div className="flex items-center gap-4 text-sm text-slate-600">
+                                            <span className="flex items-center gap-1"><Folder />{plans[focusTask.planId]}</span>
+                                            <span>{getBucketName(focusTask)}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                        <div className="text-right">
+                                            <div className="text-sm text-slate-600 mb-1">Focus Time</div>
+                                            <div className="text-3xl font-mono font-bold text-indigo-600">{formatTime(focusElapsed)}</div>
+                                        </div>
+                                        <button onClick={() => handleCompleteTask(focusTask.id)} className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors font-medium shadow-md hover:shadow-lg">
+                                            Complete Task
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Task Controls */}
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center gap-4">
+                                <h2 className="text-xl font-light text-slate-800">My Tasks</h2>
+                                <span className="px-3 py-1 bg-slate-200 text-slate-700 rounded-full text-sm font-medium">
+                                    {sortedTasks.length} active
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <select value={sortMode} onChange={(e) => setSortMode(e.target.value)} className="px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm">
+                                    <option value="myOrder">My Order</option>
+                                    <option value="priority">Priority</option>
+                                    <option value="dueDate">Due Date</option>
+                                </select>
+                                <button onClick={() => setShowNewTaskModal(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium shadow-md hover:shadow-lg">
+                                    <Plus />
+                                    New Task
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Task List */}
+                        {loading && tasks.length === 0 ? (
+                            <div className="text-center py-12">
+                                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                                <p className="mt-4 text-slate-600">Loading tasks...</p>
+                            </div>
+                        ) : sortedTasks.length === 0 ? (
+                            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center">
+                                <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                    <Check />
+                                </div>
+                                <h3 className="text-xl font-medium text-slate-800 mb-2">No active tasks</h3>
+                                <p className="text-slate-600 mb-6">Create a new task to get started</p>
+                                <button onClick={() => setShowNewTaskModal(true)} className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium shadow-md">
+                                    <Plus />
+                                    Create First Task
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {sortedTasks.map((task, index) => (
+                                    <div key={task.id} draggable={sortMode === 'myOrder'} onDragStart={() => handleDragStart(task)} onDragOver={(e) => handleDragOver(e, task)} onDragEnd={handleDragEnd} className={`bg-white rounded-xl shadow-sm border border-slate-200 p-6 transition-all hover:shadow-md ${focusTask?.id === task.id ? 'ring-2 ring-indigo-500' : ''} ${draggedTask?.id === task.id ? 'opacity-50' : ''}`}>
+                                        <div className="flex items-start gap-4">
+                                            {sortMode === 'myOrder' && (
+                                                <div className="flex flex-col gap-1 pt-1">
+                                                    <button onClick={() => moveTaskUp(task)} disabled={index === 0} className="p-1 hover:bg-slate-100 rounded disabled:opacity-30 disabled:cursor-not-allowed">
+                                                        <ChevronUp />
+                                                    </button>
+                                                    <div className="cursor-move text-slate-400 hover:text-slate-600">
+                                                        <GripVertical />
+                                                    </div>
+                                                    <button onClick={() => moveTaskDown(task)} disabled={index === sortedTasks.length - 1} className="p-1 hover:bg-slate-100 rounded disabled:opacity-30 disabled:cursor-not-allowed">
+                                                        <ChevronDown />
+                                                    </button>
+                                                </div>
+                                            )}
+                                            <div className="flex-1">
+                                                <div className="flex items-start justify-between mb-3">
+                                                    <div className="flex-1">
+                                                        <h3 className="text-lg font-medium text-slate-900 mb-2">{task.title}</h3>
+                                                        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
+                                                            <span className="flex items-center gap-1"><Folder />{plans[task.planId]}</span>
+                                                            <span className="flex items-center gap-1">{getBucketName(task)}</span>
+                                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
+                                                                {getPriorityLabel(task.priority)}
+                                                            </span>
+                                                            {task.dueDateTime && (
+                                                                <span className={`flex items-center gap-1 ${isOverdue(task) ? 'text-red-600 font-medium' : ''}`}>
+                                                                    <Calendar />
+                                                                    {new Date(task.dueDateTime).toLocaleDateString()}
+                                                                    {getDaysUntilDue(task) !== null && (
+                                                                        <span className="text-xs">({getDaysUntilDue(task)} days)</span>
+                                                                    )}
+                                                                </span>
+                                                            )}
+                                                            {task.assignments && Object.keys(task.assignments).length > 0 && (
+                                                                <span className="flex items-center gap-1">
+                                                                    <Users />
+                                                                    {Object.keys(task.assignments).map(userId => userProfiles[userId] || 'Unknown').join(', ')}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <button onClick={() => handleSetFocusTask(task)} className={`p-2 rounded-lg transition-colors ${focusTask?.id === task.id ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`} title={focusTask?.id === task.id ? 'Stop focusing' : 'Focus on this task'}>
+                                                            <Target />
+                                                        </button>
+                                                        <button onClick={() => setEditingTask(task)} className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors">
+                                                            <Edit />
+                                                        </button>
+                                                        <button onClick={() => handleCompleteTask(task.id)} className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors">
+                                                            <Check />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                {isOverdue(task) && (
+                                                    <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
+                                                        <AlertCircle />
+                                                        <span className="font-medium">Overdue</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </main>
+
+                    {showNewTaskModal && (
+                        <NewTaskModal accessToken={accessToken} plans={plans} buckets={buckets} onClose={() => setShowNewTaskModal(false)} onTaskCreated={() => {setShowNewTaskModal(false); fetchAllTasks();}} />
+                    )}
+
+                    {editingTask && (
+                        <EditTaskModal task={editingTask} accessToken={accessToken} plans={plans} buckets={buckets} onClose={() => setEditingTask(null)} onTaskUpdated={() => {setEditingTask(null); fetchAllTasks();}} />
+                    )}
                 </div>
             );
         }
 
-        function EditTaskModal({ accessToken, task, plans, buckets, userProfiles, onClose, onTaskUpdated }) {
+        function EditTaskModal({task, accessToken, plans, buckets, onClose, onTaskUpdated}) {
             const [title, setTitle] = useState(task.title || '');
-            const [description, setDescription] = useState(task.description || '');
-            const [startDate, setStartDate] = useState(task.startDateTime ? task.startDateTime.split('T')[0] : '');
-            const [dueDate, setDueDate] = useState(task.dueDateTime ? task.dueDateTime.split('T')[0] : '');
-            const [selectedPlan] = useState(task.planId || '');
+            const [description, setDescription] = useState('');
+            const [selectedPlan, setSelectedPlan] = useState(task.planId || '');
             const [selectedBucket, setSelectedBucket] = useState(task.bucketId || '');
-            const [availableBuckets, setAvailableBuckets] = useState([]);
-            const [priority, setPriority] = useState(task.priority);
+            const [dueDate, setDueDate] = useState(task.dueDateTime ? task.dueDateTime.split('T')[0] : '');
+            const [priority, setPriority] = useState(task.priority?.toString() || '5');
             const [loading, setLoading] = useState(false);
             const [error, setError] = useState(null);
 
             useEffect(() => {
-                if (selectedPlan) {
-                    fetch(`https://graph.microsoft.com/v1.0/planner/plans/${selectedPlan}/buckets`, {headers: {'Authorization': `Bearer ${accessToken}`}})
-                        .then(r => r.ok ? r.json() : null)
-                        .then(data => data && setAvailableBuckets(data.value))
-                        .catch(err => console.error('Error fetching buckets:', err));
-                }
-            }, [selectedPlan, accessToken]);
+                const fetchTaskDetails = async () => {
+                    try {
+                        const response = await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`, {
+                            headers: {'Authorization': `Bearer ${accessToken}`}
+                        });
+                        const details = await response.json();
+                        setDescription(details.description || '');
+                    } catch (err) {
+                        console.error('Error fetching task details:', err);
+                    }
+                };
+                fetchTaskDetails();
+            }, [task.id, accessToken]);
+
+            const availableBuckets = selectedPlan ? (buckets[selectedPlan] || []) : [];
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
                 setLoading(true);
                 setError(null);
+
                 try {
-                    const taskUpdateData = {title};
-                    if (startDate) taskUpdateData.startDateTime = new Date(startDate).toISOString();
-                    if (dueDate) taskUpdateData.dueDateTime = new Date(dueDate).toISOString();
-                    taskUpdateData.priority = priority === 'high' ? 1 : priority === 'medium' ? 5 : 9;
-                    if (selectedBucket !== task.bucketId) taskUpdateData.bucketId = selectedBucket;
-                    const taskResponse = await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${task.id}`, {
-                        method: 'PATCH',
-                        headers: {'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json', 'If-Match': task['@odata.etag']},
-                        body: JSON.stringify(taskUpdateData)
+                    const detailsResponse = await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`, {
+                        headers: {'Authorization': `Bearer ${accessToken}`}
                     });
-                    if (!taskResponse.ok) {
-                        const errorData = await taskResponse.json();
-                        throw new Error(errorData.error?.message || 'Failed to update task');
-                    }
-                    if (description !== task.description) {
+                    const details = await detailsResponse.json();
+
+                    await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${task.id}`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json',
+                            'If-Match': details['@odata.etag']
+                        },
+                        body: JSON.stringify({
+                            title,
+                            bucketId: selectedBucket,
+                            dueDateTime: dueDate ? new Date(dueDate).toISOString() : null,
+                            priority: parseInt(priority)
+                        })
+                    });
+
+                    if (description !== details.description) {
                         await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`, {
                             method: 'PATCH',
-                            headers: {'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json', 'If-Match': task.details?.['@odata.etag'] || task['@odata.etag']},
+                            headers: {
+                                'Authorization': `Bearer ${accessToken}`,
+                                'Content-Type': 'application/json',
+                                'If-Match': details['@odata.etag']
+                            },
                             body: JSON.stringify({description})
                         });
                     }
+
                     onTaskUpdated();
                 } catch (err) {
                     setError(err.message);
@@ -993,55 +925,46 @@
                             )}
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-2">Task Title *</label>
-                                <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="Enter task title" required />
+                                <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" required />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>
-                                <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="Enter task description" rows="4" />
+                                <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" rows="3" />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Plan</label>
-                                    <input type="text" value={plans[selectedPlan] || 'Unknown'} disabled className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 text-slate-500" />
-                                    <p className="text-xs text-slate-500 mt-1">Plan cannot be changed</p>
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">Plan *</label>
+                                    <select value={selectedPlan} onChange={(e) => setSelectedPlan(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" required>
+                                        <option value="">Select a plan</option>
+                                        {Object.entries(plans).map(([id, name]) => (<option key={id} value={id}>{name}</option>))}
+                                    </select>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-2">Bucket *</label>
-                                    <select value={selectedBucket} onChange={(e) => setSelectedBucket(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" required>
+                                    <select value={selectedBucket} onChange={(e) => setSelectedBucket(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" required disabled={!selectedPlan}>
+                                        <option value="">Select a bucket</option>
                                         {availableBuckets.map((bucket) => (<option key={bucket.id} value={bucket.id}>{bucket.name}</option>))}
                                     </select>
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Start Date</label>
-                                    <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
-                                </div>
-                                <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-2">Due Date</label>
                                     <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
                                 </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Priority</label>
-                                <select value={priority} onChange={(e) => setPriority(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
-                                    <option value="high">High</option>
-                                    <option value="medium">Medium</option>
-                                    <option value="low">Low</option>
-                                </select>
-                            </div>
-                            {task.assignments && Object.keys(task.assignments).length > 0 && (
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Current Assignees</label>
-                                    <div className="bg-slate-50 rounded-lg p-3 space-y-1">
-                                        {Object.keys(task.assignments).map(userId => (<p key={userId} className="text-sm text-slate-600">{userProfiles[userId] || 'Loading...'}</p>))}
-                                    </div>
-                                    <p className="text-xs text-slate-500 mt-1">Managing assignees in Planner is recommended</p>
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">Priority</label>
+                                    <select value={priority} onChange={(e) => setPriority(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                                        <option value="1">Urgent</option>
+                                        <option value="3">Important</option>
+                                        <option value="5">Medium</option>
+                                        <option value="9">Low</option>
+                                    </select>
                                 </div>
-                            )}
+                            </div>
                             <div className="flex gap-3 pt-4">
                                 <button type="button" onClick={onClose} className="flex-1 px-6 py-3 border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors font-medium">Cancel</button>
-                                <button type="submit" disabled={loading} className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50">{loading ? 'Updating...' : 'Update Task'}</button>
+                                <button type="submit" disabled={loading} className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50">{loading ? 'Saving...' : 'Save Changes'}</button>
                             </div>
                         </form>
                     </div>
@@ -1049,54 +972,56 @@
             );
         }
 
-        function NewTaskModal({ accessToken, plans, buckets, onClose, onTaskCreated }) {
+        function NewTaskModal({accessToken, plans, buckets, onClose, onTaskCreated}) {
             const [title, setTitle] = useState('');
             const [description, setDescription] = useState('');
-            const [dueDate, setDueDate] = useState('');
             const [selectedPlan, setSelectedPlan] = useState('');
             const [selectedBucket, setSelectedBucket] = useState('');
-            const [availableBuckets, setAvailableBuckets] = useState([]);
+            const [dueDate, setDueDate] = useState('');
             const [priority, setPriority] = useState('medium');
             const [loading, setLoading] = useState(false);
             const [error, setError] = useState(null);
 
-            useEffect(() => {
-                if (selectedPlan) {
-                    fetch(`https://graph.microsoft.com/v1.0/planner/plans/${selectedPlan}/buckets`, {headers: {'Authorization': `Bearer ${accessToken}`}})
-                        .then(r => r.ok ? r.json() : null)
-                        .then(data => {
-                            if (data) {
-                                setAvailableBuckets(data.value);
-                                if (data.value.length > 0) setSelectedBucket(data.value[0].id);
-                            }
-                        })
-                        .catch(err => console.error('Error fetching buckets:', err));
-                }
-            }, [selectedPlan, accessToken]);
+            const availableBuckets = selectedPlan ? (buckets[selectedPlan] || []) : [];
+
+            const priorityMap = {high: 1, medium: 5, low: 9};
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
                 setLoading(true);
                 setError(null);
+
                 try {
-                    if (!title || !selectedPlan || !selectedBucket) throw new Error('Please fill in all required fields');
-                    const taskData = {planId: selectedPlan, bucketId: selectedBucket, title};
-                    if (dueDate) taskData.dueDateTime = new Date(dueDate).toISOString();
-                    taskData.priority = priority === 'high' ? 1 : priority === 'medium' ? 5 : 9;
+                    const taskData = {
+                        planId: selectedPlan,
+                        bucketId: selectedBucket,
+                        title: title,
+                        priority: priorityMap[priority]
+                    };
+
+                    if (dueDate) {
+                        taskData.dueDateTime = new Date(dueDate).toISOString();
+                    }
+
                     const response = await fetch('https://graph.microsoft.com/v1.0/planner/tasks', {
                         method: 'POST',
-                        headers: {'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json'},
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json'
+                        },
                         body: JSON.stringify(taskData)
                     });
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.error?.message || 'Failed to create task');
-                    }
+
                     const newTask = await response.json();
+
                     if (description) {
                         await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${newTask.id}/details`, {
                             method: 'PATCH',
-                            headers: {'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json', 'If-Match': newTask['@odata.etag']},
+                            headers: {
+                                'Authorization': `Bearer ${accessToken}`,
+                                'Content-Type': 'application/json',
+                                'If-Match': 'W/"JzEtVGFzayAgQEBAQEBAQEBAQEBAQEBARCc="'
+                            },
                             body: JSON.stringify({description})
                         });
                     }

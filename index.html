@@ -244,6 +244,7 @@
                     const filteredTasks = tasksData.value
                         .filter(task => {
                             if (!task.dueDateTime) return false;
+                            if (task.percentComplete === 100) return false;
                             const dueDate = new Date(task.dueDateTime);
                             return dueDate <= sevenDaysFromNow;
                         })

@@ -9,9 +9,12 @@ import Header from './components/layout/Header';
 import Dashboard from './components/dashboard/Dashboard';
 import WorkTimer from './components/focus/WorkTimer';
 import FocusTaskCard from './components/focus/FocusTaskCard';
-import TaskList from './components/tasks/TaskList';
+import FilterBar from './components/tasks/FilterBar';
+import AllTasksList from './components/tasks/AllTasksList';
+import PriorityQueue from './components/tasks/PriorityQueue';
 import NewTaskModal from './components/tasks/NewTaskModal';
 import EditTaskModal from './components/tasks/EditTaskModal';
+import PriorityLimitModal from './components/modals/PriorityLimitModal';
 
 function App() {
   const auth = useAuth();
@@ -34,11 +37,20 @@ function App() {
   const [editingTask, setEditingTask] = useState(null);
   const [editingTaskDetails, setEditingTaskDetails] = useState(null);
   const [showDashboard, setShowDashboard] = useState(true);
+  const [showPriorityLimitModal, setShowPriorityLimitModal] = useState(false);
 
-  // Sorting and ordering
-  const [sortMode, setSortMode] = useState('myOrder');
-  const [customOrder, setCustomOrder] = useState([]);
+  // Priority Queue (max 7 tasks)
+  const [priorityQueue, setPriorityQueue] = useState([]);
+
+  // Filtering and sorting
+  const [sortBy, setSortBy] = useState('dueDate');
+  const [filters, setFilters] = useState({
+    priority: '',
+    planId: '',
+    dateRange: ''
+  });
   const [draggedTask, setDraggedTask] = useState(null);
+  const [dragSource, setDragSource] = useState(null); // 'all' or 'priority'
 
   // Dashboard
   const [dateRange, setDateRange] = useState('7days');
@@ -85,24 +97,22 @@ function App() {
     }
   }, []);
 
-  // Load custom task order from localStorage
+  // Load priority queue from localStorage
   useEffect(() => {
-    const saved = localStorage.getItem('customTaskOrder');
+    const saved = localStorage.getItem('priorityQueue');
     if (saved) {
       try {
-        setCustomOrder(JSON.parse(saved));
+        setPriorityQueue(JSON.parse(saved));
       } catch (err) {
-        console.error('Error loading custom order:', err);
+        console.error('Error loading priority queue:', err);
       }
     }
   }, []);
 
-  // Save custom order to localStorage
+  // Save priority queue to localStorage
   useEffect(() => {
-    if (customOrder.length > 0) {
-      localStorage.setItem('customTaskOrder', JSON.stringify(customOrder));
-    }
-  }, [customOrder]);
+    localStorage.setItem('priorityQueue', JSON.stringify(priorityQueue));
+  }, [priorityQueue]);
 
   // Fetch user profile and tasks when authenticated
   useEffect(() => {
@@ -160,31 +170,65 @@ function App() {
     return diffDays;
   };
 
-  const sortTasks = (tasksToSort) => {
-    const incompleteTasks = tasksToSort.filter(task => task.percentComplete < 100);
-    
-    switch (sortMode) {
-      case 'myOrder':
-        return incompleteTasks.sort((a, b) => {
-          const indexA = customOrder.indexOf(a.id);
-          const indexB = customOrder.indexOf(b.id);
-          if (indexA === -1 && indexB === -1) return 0;
-          if (indexA === -1) return 1;
-          if (indexB === -1) return -1;
-          return indexA - indexB;
-        });
-      case 'priority':
-        return incompleteTasks.sort((a, b) => (a.priority || 5) - (b.priority || 5));
-      case 'dueDate':
-        return incompleteTasks.sort((a, b) => {
-          if (!a.dueDateTime && !b.dueDateTime) return 0;
-          if (!a.dueDateTime) return 1;
-          if (!b.dueDateTime) return -1;
-          return new Date(a.dueDateTime) - new Date(b.dueDateTime);
-        });
-      default:
-        return incompleteTasks;
+  const filterAndSortTasks = (tasksToFilter) => {
+    let filtered = tasksToFilter.filter(task => task.percentComplete < 100);
+
+    // Apply filters
+    if (filters.priority) {
+      filtered = filtered.filter(task => task.priority === parseInt(filters.priority));
     }
+
+    if (filters.planId) {
+      filtered = filtered.filter(task => task.planId === filters.planId);
+    }
+
+    if (filters.dateRange) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      filtered = filtered.filter(task => {
+        if (filters.dateRange === 'none') {
+          return !task.dueDateTime;
+        }
+        if (!task.dueDateTime) return false;
+
+        const dueDateStr = task.dueDateTime.split('T')[0];
+        const dueDate = new Date(dueDateStr + 'T00:00:00');
+        dueDate.setHours(0, 0, 0, 0);
+
+        switch (filters.dateRange) {
+          case 'overdue':
+            return dueDate < today;
+          case 'today':
+            return dueDate.getTime() === today.getTime();
+          case 'week':
+            const weekFromNow = new Date(today);
+            weekFromNow.setDate(weekFromNow.getDate() + 7);
+            return dueDate >= today && dueDate <= weekFromNow;
+          case 'month':
+            const monthFromNow = new Date(today);
+            monthFromNow.setMonth(monthFromNow.getMonth() + 1);
+            return dueDate >= today && dueDate <= monthFromNow;
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Sort
+    filtered.sort((a, b) => {
+      if (sortBy === 'priority') {
+        return (a.priority || 5) - (b.priority || 5);
+      } else if (sortBy === 'dueDate') {
+        if (!a.dueDateTime && !b.dueDateTime) return 0;
+        if (!a.dueDateTime) return 1;
+        if (!b.dueDateTime) return -1;
+        return new Date(a.dueDateTime) - new Date(b.dueDateTime);
+      }
+      return 0;
+    });
+
+    return filtered;
   };
 
   // Task actions
@@ -210,6 +254,9 @@ function App() {
           delete updated[taskId];
           return updated;
         });
+
+        // Remove from priority queue if present
+        setPriorityQueue(prev => prev.filter(id => id !== taskId));
       }
 
       if (focusTask?.id === taskId) {
@@ -275,62 +322,69 @@ function App() {
     setEditingTaskDetails(details);
   };
 
-  // Drag and drop handlers
-  const handleDragStart = (task) => {
-    setDraggedTask(task);
+  // Priority Queue actions
+  const addToPriorityQueue = (taskId) => {
+    if (priorityQueue.length >= 7) {
+      setShowPriorityLimitModal(true);
+      return false;
+    }
+    if (!priorityQueue.includes(taskId)) {
+      setPriorityQueue([...priorityQueue, taskId]);
+    }
+    return true;
   };
 
-  const handleDragOver = (e, targetTask) => {
+  const removeFromPriorityQueue = (taskId) => {
+    setPriorityQueue(prev => prev.filter(id => id !== taskId));
+  };
+
+  const reorderPriorityQueue = (draggedTaskId, targetTaskId) => {
+    const draggedIndex = priorityQueue.indexOf(draggedTaskId);
+    const targetIndex = priorityQueue.indexOf(targetTaskId);
+    
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    const newQueue = [...priorityQueue];
+    newQueue.splice(draggedIndex, 1);
+    newQueue.splice(targetIndex, 0, draggedTaskId);
+    setPriorityQueue(newQueue);
+  };
+
+  // Drag and drop handlers
+  const handleDragStart = (task, source) => {
+    setDraggedTask(task);
+    setDragSource(source);
+  };
+
+  const handleDragOver = (e, targetTask, targetSource) => {
     e.preventDefault();
     if (!draggedTask || draggedTask.id === targetTask.id) return;
 
-    const sortedTasks = sortTasks(taskManager.tasks);
-    const draggedIndex = sortedTasks.findIndex(t => t.id === draggedTask.id);
-    const targetIndex = sortedTasks.findIndex(t => t.id === targetTask.id);
-
-    if (draggedIndex === -1 || targetIndex === -1) return;
-
-    const newOrder = [...customOrder];
-    const draggedId = draggedTask.id;
-    const targetId = targetTask.id;
-
-    const currentDraggedIndex = newOrder.indexOf(draggedId);
-    if (currentDraggedIndex !== -1) {
-      newOrder.splice(currentDraggedIndex, 1);
+    // Reordering within priority queue
+    if (dragSource === 'priority' && targetSource === 'priority') {
+      reorderPriorityQueue(draggedTask.id, targetTask.id);
     }
-
-    const currentTargetIndex = newOrder.indexOf(targetId);
-    if (currentTargetIndex !== -1) {
-      newOrder.splice(currentTargetIndex, 0, draggedId);
-    } else {
-      newOrder.push(draggedId);
-    }
-
-    setCustomOrder(newOrder);
   };
 
   const handleDragEnd = () => {
     setDraggedTask(null);
+    setDragSource(null);
   };
 
-  const moveTaskUp = (task) => {
-    const sortedTasks = sortTasks(taskManager.tasks);
-    const currentIndex = sortedTasks.findIndex(t => t.id === task.id);
-    if (currentIndex <= 0) return;
+  const handleDrop = (e, targetSource) => {
+    e.preventDefault();
+    if (!draggedTask) return;
 
-    const newOrder = sortedTasks.map(t => t.id);
-    [newOrder[currentIndex], newOrder[currentIndex - 1]] = [newOrder[currentIndex - 1], newOrder[currentIndex]];
-    setCustomOrder(newOrder);
-  };
+    // Dragging from all tasks to priority queue
+    if (dragSource === 'all' && targetSource === 'priority') {
+      addToPriorityQueue(draggedTask.id);
+    }
+    // Dragging from priority back to all (remove from priority)
+    else if (dragSource === 'priority' && targetSource === 'all') {
+      removeFromPriorityQueue(draggedTask.id);
+    }
 
-  const moveTaskDown = (task) => {
-    const sortedTasks = sortTasks(taskManager.tasks);
-    const currentIndex = sortedTasks.findIndex(t => t.id === task.id);
-    if (currentIndex === -1 || currentIndex >= sortedTasks.length - 1) return;
-
-    const newOrder = sortedTasks.map(t => t.id);
-    [newOrder[currentIndex], newOrder[currentIndex + 1]] = [newOrder[currentIndex + 1], newOrder[currentIndex]];
-    setCustomOrder(newOrder);
+    handleDragEnd();
   };
 
   // Dashboard metrics
@@ -411,7 +465,10 @@ function App() {
     return <LoginScreen onLogin={auth.handleLogin} loading={auth.loading} />;
   }
 
-  const sortedTasks = sortTasks(taskManager.tasks);
+  const filteredTasks = filterAndSortTasks(taskManager.tasks);
+  const priorityTasks = priorityQueue
+    .map(id => taskManager.tasks.find(t => t.id === id))
+    .filter(Boolean);
   const dashboardMetrics = calculateDashboardMetrics();
 
   return (
@@ -425,7 +482,7 @@ function App() {
         onToggleDashboard={() => setShowDashboard(!showDashboard)}
       />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {taskManager.error && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
             <div className="flex-1">
@@ -465,26 +522,63 @@ function App() {
           />
         )}
 
-        <TaskList 
-          tasks={sortedTasks}
-          loading={taskManager.loading}
-          sortMode={sortMode}
-          setSortMode={setSortMode}
-          onNewTask={() => setShowNewTaskModal(true)}
-          onSetFocus={handleSetFocusTask}
-          onEdit={handleEditTask}
-          onComplete={handleCompleteTask}
-          focusTask={focusTask}
-          plans={taskManager.plans}
-          buckets={taskManager.buckets}
-          userProfiles={taskManager.userProfiles}
-          draggedTask={draggedTask}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
-          moveTaskUp={moveTaskUp}
-          moveTaskDown={moveTaskDown}
-        />
+        {/* Two-Column Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column - All Tasks (2/3 width) */}
+          <div className="lg:col-span-2 space-y-4">
+            <FilterBar 
+              sortBy={sortBy}
+              setSortBy={setSortBy}
+              filters={filters}
+              setFilters={setFilters}
+              plans={taskManager.plans}
+              onClearFilters={() => setFilters({ priority: '', planId: '', dateRange: '' })}
+            />
+
+            <div
+              onDragOver={(e) => { e.preventDefault(); }}
+              onDrop={(e) => handleDrop(e, 'all')}
+            >
+              <AllTasksList 
+                tasks={filteredTasks}
+                loading={taskManager.loading}
+                plans={taskManager.plans}
+                buckets={taskManager.buckets}
+                userProfiles={taskManager.userProfiles}
+                focusTask={focusTask}
+                priorityTaskIds={priorityQueue}
+                onNewTask={() => setShowNewTaskModal(true)}
+                onSetFocus={handleSetFocusTask}
+                onEdit={handleEditTask}
+                onComplete={handleCompleteTask}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDragEnd={handleDragEnd}
+              />
+            </div>
+          </div>
+
+          {/* Right Column - Priority Queue (1/3 width) */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); }}
+            onDrop={(e) => handleDrop(e, 'priority')}
+          >
+            <PriorityQueue 
+              priorityTasks={priorityTasks}
+              plans={taskManager.plans}
+              buckets={taskManager.buckets}
+              focusTask={focusTask}
+              onRemoveFromPriority={removeFromPriorityQueue}
+              onReorder={reorderPriorityQueue}
+              onSetFocus={handleSetFocusTask}
+              onEdit={handleEditTask}
+              onComplete={handleCompleteTask}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragEnd={handleDragEnd}
+            />
+          </div>
+        </div>
       </main>
 
       {showNewTaskModal && (
@@ -517,6 +611,11 @@ function App() {
           }}
         />
       )}
+
+      <PriorityLimitModal 
+        isOpen={showPriorityLimitModal}
+        onClose={() => setShowPriorityLimitModal(false)}
+      />
     </div>
   );
 }

@@ -44,6 +44,7 @@ export function useTimer() {
     stop,
     reset,
     setStartTime,
-    setElapsed
+    setElapsed,
+    setIsRunning
   };
 }

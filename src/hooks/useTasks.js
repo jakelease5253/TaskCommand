@@ -173,6 +173,21 @@ export function useTasks(accessToken) {
     }
   };
 
+  const fetchTaskDetails = async (taskId) => {
+    if (!accessToken) return null;
+    
+    try {
+      const detailsResponse = await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${taskId}/details`, {
+        headers: {'Authorization': `Bearer ${accessToken}`}
+      });
+      const details = await detailsResponse.json();
+      return details;
+    } catch (err) {
+      console.error('Error fetching task details:', err);
+      return null;
+    }
+  };
+
   return {
     tasks,
     plans,
@@ -185,6 +200,7 @@ export function useTasks(accessToken) {
     completeTask,
     createTask,
     updateTask,
-    updateTaskDetails
+    updateTaskDetails,
+    fetchTaskDetails
   };
 }

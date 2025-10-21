@@ -57,6 +57,13 @@ export default function FocusTaskCard({
           </div>
           <h4 className="text-2xl font-bold text-slate-900 mb-4">{task.title}</h4>
           
+          {/* Task Description */}
+          {task.description && (
+            <div className="mb-4 p-4 bg-white rounded-xl shadow-sm">
+              <p className="text-sm text-slate-700 whitespace-pre-wrap">{task.description}</p>
+            </div>
+          )}
+          
           {/* Task Details Grid */}
           <div className="grid grid-cols-2 gap-3 mb-4">
             <div className="flex items-center gap-2 text-sm text-slate-700">
@@ -64,7 +71,7 @@ export default function FocusTaskCard({
               <span className="font-medium">{planName}</span>
             </div>
             <div className="flex items-center gap-2 text-sm text-slate-700">
-              <span className="font-medium">{bucketName}</span>
+              <span className="font-medium">{bucketName || 'No Bucket'}</span>
             </div>
             {task.dueDateTime && (
               <div className="flex items-center gap-2 text-sm text-slate-700">

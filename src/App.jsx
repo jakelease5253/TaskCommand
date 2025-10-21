@@ -24,10 +24,15 @@ function App() {
 
   // Focus task state
   const [focusTask, setFocusTask] = useState(null);
+  const [focusTaskDetails, setFocusTaskDetails] = useState(null);
+  
+  // Store focus time per task (taskId -> seconds)
+  const [taskFocusTimes, setTaskFocusTimes] = useState({});
 
   // UI state
   const [showNewTaskModal, setShowNewTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
+  const [editingTaskDetails, setEditingTaskDetails] = useState(null);
   const [showDashboard, setShowDashboard] = useState(true);
 
   // Sorting and ordering
@@ -38,6 +43,35 @@ function App() {
   // Dashboard
   const [dateRange, setDateRange] = useState('7days');
   const [completedTasksHistory, setCompletedTasksHistory] = useState([]);
+
+  // Load task focus times from localStorage
+  useEffect(() => {
+    const savedTimes = localStorage.getItem('taskFocusTimes');
+    if (savedTimes) {
+      try {
+        setTaskFocusTimes(JSON.parse(savedTimes));
+      } catch (err) {
+        console.error('Error loading task focus times:', err);
+      }
+    }
+  }, []);
+
+  // Save task focus times to localStorage whenever they change
+  useEffect(() => {
+    if (Object.keys(taskFocusTimes).length > 0) {
+      localStorage.setItem('taskFocusTimes', JSON.stringify(taskFocusTimes));
+    }
+  }, [taskFocusTimes]);
+
+  // Update the current focused task's time whenever the timer ticks
+  useEffect(() => {
+    if (focusTask && focusTimer.isRunning) {
+      setTaskFocusTimes(prev => ({
+        ...prev,
+        [focusTask.id]: focusTimer.elapsed
+      }));
+    }
+  }, [focusTimer.elapsed, focusTask]);
 
   // Load completed tasks history from localStorage
   useEffect(() => {
@@ -90,7 +124,7 @@ function App() {
   const getBucketName = (task) => {
     const planBuckets = taskManager.buckets[task.planId] || [];
     const bucket = planBuckets.find(b => b.id === task.bucketId);
-    return bucket ? bucket.name : 'Unknown Bucket';
+    return bucket ? bucket.name : 'No Bucket';
   };
 
   const getPriorityLabel = (priority) => {
@@ -163,12 +197,19 @@ function App() {
           ...task,
           completedDateTime: new Date().toISOString(),
           percentComplete: 100,
-          focusTime: focusTask?.id === taskId ? focusTimer.elapsed : 0
+          focusTime: taskFocusTimes[taskId] || 0
         };
         
         const updatedHistory = [completedTask, ...completedTasksHistory];
         setCompletedTasksHistory(updatedHistory);
         localStorage.setItem('completedTasksHistory', JSON.stringify(updatedHistory));
+        
+        // Clean up the focus time for this task
+        setTaskFocusTimes(prev => {
+          const updated = { ...prev };
+          delete updated[taskId];
+          return updated;
+        });
       }
 
       if (focusTask?.id === taskId) {
@@ -182,15 +223,37 @@ function App() {
     }
   };
 
-  const handleSetFocusTask = (task) => {
+  const handleSetFocusTask = async (task) => {
     if (focusTask?.id === task.id) {
+      // Unfocusing - save the current time and stop the timer
+      setTaskFocusTimes(prev => ({
+        ...prev,
+        [task.id]: focusTimer.elapsed
+      }));
       setFocusTask(null);
+      setFocusTaskDetails(null);
       focusTimer.stop();
     } else {
+      // Switching focus - save current task's time if there is one
+      if (focusTask) {
+        setTaskFocusTimes(prev => ({
+          ...prev,
+          [focusTask.id]: focusTimer.elapsed
+        }));
+      }
+      
+      // Focus new task - resume from saved time or start fresh
       setFocusTask(task);
-      focusTimer.setStartTime(Date.now());
-      focusTimer.setElapsed(0);
-      focusTimer.start();
+      const savedTime = taskFocusTimes[task.id] || 0;
+      
+      // Set elapsed and startTime together to avoid race condition
+      focusTimer.setElapsed(savedTime);
+      focusTimer.setStartTime(Date.now() - (savedTime * 1000));
+      focusTimer.setIsRunning(true);
+      
+      // Fetch task details (including description)
+      const details = await taskManager.fetchTaskDetails(task.id);
+      setFocusTaskDetails(details);
     }
   };
 
@@ -204,6 +267,12 @@ function App() {
 
   const stopWorkTimer = () => {
     workTimer.stop();
+  };
+
+  const handleEditTask = async (task) => {
+    setEditingTask(task);
+    const details = await taskManager.fetchTaskDetails(task.id);
+    setEditingTaskDetails(details);
   };
 
   // Drag and drop handlers
@@ -364,7 +433,7 @@ function App() {
               <p className="text-sm text-red-700">{taskManager.error}</p>
             </div>
             <button onClick={() => taskManager.setError(null)} className="flex-shrink-0 text-red-400 hover:text-red-600">
-              Ã—
+              ×
             </button>
           </div>
         )}
@@ -387,7 +456,7 @@ function App() {
 
         {focusTask && (
           <FocusTaskCard 
-            task={focusTask}
+            task={{...focusTask, description: focusTaskDetails?.description}}
             elapsed={focusTimer.elapsed}
             planName={taskManager.plans[focusTask.planId]}
             bucketName={getBucketName(focusTask)}
@@ -403,7 +472,7 @@ function App() {
           setSortMode={setSortMode}
           onNewTask={() => setShowNewTaskModal(true)}
           onSetFocus={handleSetFocusTask}
-          onEdit={setEditingTask}
+          onEdit={handleEditTask}
           onComplete={handleCompleteTask}
           focusTask={focusTask}
           plans={taskManager.plans}
@@ -433,13 +502,17 @@ function App() {
 
       {editingTask && (
         <EditTaskModal 
-          task={editingTask}
+          task={{...editingTask, description: editingTaskDetails?.description}}
           accessToken={auth.accessToken}
           plans={taskManager.plans}
           buckets={taskManager.buckets}
-          onClose={() => setEditingTask(null)}
+          onClose={() => {
+            setEditingTask(null);
+            setEditingTaskDetails(null);
+          }}
           onTaskUpdated={() => {
             setEditingTask(null);
+            setEditingTaskDetails(null);
             taskManager.fetchAllTasks();
           }}
         />

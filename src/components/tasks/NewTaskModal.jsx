@@ -1,16 +1,95 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { X, AlertCircle } from "../ui/icons";
 
 export default function NewTaskModal({
-  isOpen,
-  errorText,
-  plans = {},                // { planId: planName }
-  bucketsByPlan = {},        // { planId: [{id, name}] }
-  loading = false,
+  accessToken,
+  plans = {},
+  buckets = {},
   onClose,
-  onSubmit,                  // (formData) => void
+  onTaskCreated,
 }) {
-  if (!isOpen) return null;
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [selectedPlanId, setSelectedPlanId] = useState('');
+  const [availableBuckets, setAvailableBuckets] = useState([]);
+
+  // Update available buckets when plan changes
+  useEffect(() => {
+    if (selectedPlanId && buckets[selectedPlanId]) {
+      setAvailableBuckets(buckets[selectedPlanId]);
+    } else {
+      setAvailableBuckets([]);
+    }
+  }, [selectedPlanId, buckets]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    const formData = new FormData(e.target);
+    const title = formData.get('title');
+    const description = formData.get('description');
+    const planId = formData.get('planId');
+    const bucketId = formData.get('bucketId');
+    const dueDate = formData.get('dueDate');
+    const priority = parseInt(formData.get('priority'));
+
+    try {
+      // Create task
+      const taskData = {
+        planId,
+        bucketId,
+        title,
+      };
+
+      if (dueDate) {
+        taskData.dueDateTime = new Date(dueDate).toISOString();
+      }
+
+      if (priority) {
+        taskData.priority = priority;
+      }
+
+      const response = await fetch('https://graph.microsoft.com/v1.0/planner/tasks', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(taskData)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create task');
+      }
+
+      const newTask = await response.json();
+
+      // If there's a description, update task details
+      if (description) {
+        const detailsResponse = await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${newTask.id}/details`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+        const details = await detailsResponse.json();
+
+        await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${newTask.id}/details`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            'If-Match': details['@odata.etag']
+          },
+          body: JSON.stringify({ description })
+        });
+      }
+
+      onTaskCreated();
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -24,11 +103,11 @@ export default function NewTaskModal({
           </div>
         </div>
 
-        <form onSubmit={onSubmit} className="p-6 space-y-4">
-          {errorText && (
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
               <div className="flex-shrink-0 mt-0.5"><AlertCircle /></div>
-              <p className="text-sm text-red-800">{errorText}</p>
+              <p className="text-sm text-red-800">{error}</p>
             </div>
           )}
 
@@ -58,6 +137,8 @@ export default function NewTaskModal({
               <label className="block text-sm font-medium text-slate-700 mb-2">Plan *</label>
               <select
                 name="planId"
+                value={selectedPlanId}
+                onChange={(e) => setSelectedPlanId(e.target.value)}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 required
               >
@@ -74,8 +155,12 @@ export default function NewTaskModal({
                 name="bucketId"
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 required
+                disabled={!selectedPlanId}
               >
                 <option value="">Select a bucket</option>
+                {availableBuckets.map((bucket) => (
+                  <option key={bucket.id} value={bucket.id}>{bucket.name}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -95,11 +180,12 @@ export default function NewTaskModal({
               <select
                 name="priority"
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                defaultValue="medium"
+                defaultValue="5"
               >
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
+                <option value="1">Urgent</option>
+                <option value="3">Important</option>
+                <option value="5">Medium</option>
+                <option value="9">Low</option>
               </select>
             </div>
           </div>

@@ -86,20 +86,33 @@ export function useTasks(accessToken) {
       const task = tasks.find(t => t.id === taskId);
       if (!task) return;
 
-      const detailsResponse = await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${taskId}/details`, {
-        headers: {'Authorization': `Bearer ${accessToken}`}
-      });
-      const details = await detailsResponse.json();
+      // Fetch fresh task to get current etag
+      const taskResponse = await fetch(
+        `https://graph.microsoft.com/v1.0/planner/tasks/${taskId}`,
+        { 
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        }
+      );
+      const freshTask = await taskResponse.json();
 
-      await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${taskId}`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-          'If-Match': details['@odata.etag']
-        },
-        body: JSON.stringify({percentComplete: 100})
-      });
+      // Mark as complete using fresh etag
+      const updateResponse = await fetch(
+        `https://graph.microsoft.com/v1.0/planner/tasks/${taskId}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            'If-Match': freshTask['@odata.etag']
+          },
+          body: JSON.stringify({ percentComplete: 100 })
+        }
+      );
+
+      if (!updateResponse.ok) {
+        const errorData = await updateResponse.json();
+        throw new Error(errorData.error?.message || 'Failed to complete task');
+      }
 
       return task;
     } catch (err) {

@@ -118,6 +118,19 @@ export const Zap = (p) => (
   <Svg {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></Svg>
 );
 
+export const Filter = (p) => (
+  <Svg {...p}>
+    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+  </Svg>
+);
+
+export const SortAsc = (p) => (
+  <Svg {...p}>
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <polyline points="5 12 12 5 19 12" />
+  </Svg>
+);
+
 // 24px default
 export const Target = ({ size = 24, ...p }) => (
   <Svg size={size} {...p}>
@@ -201,4 +214,5 @@ export default {
   BarChart,
   Award,
   Zap,
+  Filter,
 };

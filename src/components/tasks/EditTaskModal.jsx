@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { X, Calendar, Target, AlertCircle } from "../ui/icons";
+import React, { useState, useEffect } from "react";
+import { X, AlertCircle } from "../ui/icons";
 
 export default function EditTaskModal({
   task,
@@ -11,6 +11,40 @@ export default function EditTaskModal({
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [taskEtag, setTaskEtag] = useState(null);
+  const [detailsEtag, setDetailsEtag] = useState(null);
+  const [currentDescription, setCurrentDescription] = useState('');
+
+  // Fetch the current task and details to get etags
+  useEffect(() => {
+    const fetchTaskData = async () => {
+      try {
+        // Fetch task to get its etag
+        const taskResponse = await fetch(
+          `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}`,
+          { headers: { 'Authorization': `Bearer ${accessToken}` } }
+        );
+        const taskData = await taskResponse.json();
+        setTaskEtag(taskData['@odata.etag']);
+
+        // Fetch task details to get its etag and description
+        const detailsResponse = await fetch(
+          `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`,
+          { headers: { 'Authorization': `Bearer ${accessToken}` } }
+        );
+        const detailsData = await detailsResponse.json();
+        setDetailsEtag(detailsData['@odata.etag']);
+        setCurrentDescription(detailsData.description || '');
+      } catch (err) {
+        console.error('Error fetching task data:', err);
+        setError('Failed to load task data');
+      }
+    };
+
+    if (task && accessToken) {
+      fetchTaskData();
+    }
+  }, [task, accessToken]);
 
   if (!task) return null;
 
@@ -26,138 +60,170 @@ export default function EditTaskModal({
     const description = formData.get('description');
 
     try {
-      // Fetch current task details to get etag
-      const detailsResponse = await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`, {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      });
-      const details = await detailsResponse.json();
-
-      // Update basic task properties
+      // Update basic task properties (title, priority, due date)
       const updateData = {
         title,
         priority
       };
 
       if (dueDate) {
-        updateData.dueDateTime = new Date(dueDate).toISOString();
+        // Parse the date as local and set to noon UTC to avoid timezone issues
+        const [year, month, day] = dueDate.split('-');
+        const date = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), 12, 0, 0));
+        updateData.dueDateTime = date.toISOString();
+      } else {
+        updateData.dueDateTime = null; // Clear due date if empty
       }
 
-      await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${task.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-          'If-Match': details['@odata.etag']
-        },
-        body: JSON.stringify(updateData)
-      });
-
-      // Update description if changed
-      if (description !== undefined) {
-        await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`, {
+      const taskResponse = await fetch(
+        `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}`,
+        {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
-            'If-Match': details['@odata.etag']
+            'If-Match': taskEtag
           },
-          body: JSON.stringify({ description })
-        });
+          body: JSON.stringify(updateData)
+        }
+      );
+
+      if (!taskResponse.ok) {
+        const errorData = await taskResponse.json();
+        throw new Error(errorData.error?.message || 'Failed to update task');
+      }
+
+      // Update description if it changed
+      if (description !== currentDescription) {
+        const detailsResponse = await fetch(
+          `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+              'If-Match': detailsEtag
+            },
+            body: JSON.stringify({ description })
+          }
+        );
+
+        if (!detailsResponse.ok) {
+          const errorData = await detailsResponse.json();
+          throw new Error(errorData.error?.message || 'Failed to update description');
+        }
       }
 
       onTaskUpdated();
     } catch (err) {
+      console.error('Error updating task:', err);
       setError(err.message);
       setLoading(false);
     }
   };
 
+  // Format date for input field
+  const formatDateForInput = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toISOString().split('T')[0];
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/30 grid place-items-center p-4 z-50">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-xl p-6 space-y-4">
-        <div className="flex justify-between items-center">
-          <h3 className="text-xl font-semibold text-slate-800">Edit Task</h3>
-          <button type="button" onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
-            <X />
-          </button>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b border-slate-200">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-semibold text-slate-800">Edit Task</h2>
+            <button 
+              type="button" 
+              onClick={onClose} 
+              className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+              <X />
+            </button>
+          </div>
         </div>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-            <div className="flex-shrink-0 mt-0.5"><AlertCircle /></div>
-            <p className="text-sm text-red-800">{error}</p>
-          </div>
-        )}
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+              <div className="flex-shrink-0 mt-0.5"><AlertCircle /></div>
+              <p className="text-sm text-red-800">{error}</p>
+            </div>
+          )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Title</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Task Title *
+            </label>
             <input
               name="title"
+              type="text"
               defaultValue={task.title}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              placeholder="Enter task title"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Description
+            </label>
             <textarea
               name="description"
-              defaultValue={task.description || ''}
+              defaultValue={currentDescription}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              rows="3"
+              placeholder="Enter task description"
+              rows="4"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                <span className="inline-flex items-center gap-1">
-                  <Calendar /> Due Date
-                </span>
+                Due Date
               </label>
               <input
                 name="dueDate"
                 type="date"
-                defaultValue={task.dueDateTime ? task.dueDateTime.split("T")[0] : ""}
+                defaultValue={formatDateForInput(task.dueDateTime)}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                <span className="inline-flex items-center gap-1">
-                  <Target /> Priority
-                </span>
+                Priority
               </label>
               <select
                 name="priority"
-                defaultValue={task.priority ?? 5}
+                defaultValue={task.priority || 5}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               >
-                <option value={1}>Urgent</option>
-                <option value={3}>Important</option>
-                <option value={5}>Medium</option>
-                <option value={9}>Low</option>
+                <option value="1">Urgent</option>
+                <option value="3">Important</option>
+                <option value="5">Medium</option>
+                <option value="9">Low</option>
               </select>
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button 
-              type="button" 
-              onClick={onClose} 
-              className="px-6 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-6 py-3 border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors font-medium"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={loading}
-              className="px-6 py-2 gradient-primary text-white rounded-lg transition-all font-medium disabled:opacity-50 shadow-md hover:shadow-lg"
+              disabled={loading || !taskEtag || !detailsEtag}
+              className="flex-1 px-6 py-3 gradient-primary text-white rounded-xl transition-all font-medium disabled:opacity-50 shadow-md hover:shadow-lg"
             >
-              {loading ? "Saving..." : "Save Changes"}
+              {loading ? "Updating..." : "Update Task"}
             </button>
           </div>
         </form>

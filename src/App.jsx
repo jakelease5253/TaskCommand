@@ -586,6 +586,7 @@ function App() {
           accessToken={auth.accessToken}
           plans={taskManager.plans}
           buckets={taskManager.buckets}
+          currentUserId={auth.user?.id}
           onClose={() => setShowNewTaskModal(false)}
           onTaskCreated={() => {
             setShowNewTaskModal(false);

@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Primary */
+  --primary-start: #3b82f6;
+  --primary-end: #2563eb;
+  --primary-gradient: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  
+  /* Accent */
+  --accent: #10b981;
+  
+  /* Text */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #94a3b8;
+  
+  /* Backgrounds */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  
+  /* Borders */
+  --border-default: #e2e8f0;
+  --border-subtle: #cbd5e0;
+  
+  /* States */
+  --error: #f56565;
+  --warning: #ed8936;
+  --success: #10b981;
+  --info: #4299e1;
+}
+
+* {
+  font-family: 'Poppins', sans-serif;
+}
+
+.font-mono,
+.timer-display {
+  font-family: 'Fira Code', monospace;
+}
+
+.gradient-primary {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+body {
+  font-family: 'Poppins', sans-serif;
+  margin: 0;
+  padding: 0;
+}

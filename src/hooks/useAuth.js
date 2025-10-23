@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-const REDIRECT_URI = import.meta.env.VITE_REDIRECT_URI || 'http://localhost:3000';
+const REDIRECT_URI = import.meta.env.VITE_REDIRECT_URI || window.location.origin;
 const MSAL_CONFIG = {
   auth: {
     clientId: import.meta.env.VITE_MSAL_CLIENT_ID || '8724797a-a121-4f6c-bc18-2cc72266a686',

@@ -1,0 +1,36 @@
+name: Deploy to Azure Static Web Apps
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}   # ← adds a "Run workflow" button in Actions
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build
+        env:
+          VITE_MSAL_CLIENT_ID: 8724797a-a121-4f6c-bc18-2cc72266a686
+          VITE_MSAL_TENANT_ID: 327a958f-68a1-40f6-aada-48a87827f0b1
+          VITE_REDIRECT_URI: https://task.fieldworks.com
+          VITE_GRAPH_SCOPES: Tasks.ReadWrite,Group.Read.All,User.Read
+        run: |
+          npm ci
+          npm run build
+          echo "---- dist listing ----"
+          ls -al dist || (echo "dist missing!" && exit 1)
+
+      - name: Deploy
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: upload
+          app_location: "/"
+          output_location: "dist"

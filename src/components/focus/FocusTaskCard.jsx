@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Clock, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import ProgressBar from './ProgressBar';
 import Checklist from './Checklist';
+import EditTaskModal from '../tasks/EditTaskModal';
 
 export default function FocusTaskCard({
   task,
@@ -41,14 +42,25 @@ export default function FocusTaskCard({
     ? `${daysUntilDue} day${daysUntilDue === 1 ? '' : 's'} remaining`
     : 'No due date';
 
+  const [showEdit, setShowEdit] = useState(false);
+
   return (
     <div className="bg-white rounded-2xl shadow-md p-6 w-full max-w-2xl mx-auto mb-8">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="text-xl font-semibold text-slate-800 break-words">
-            {task.title || 'Focused Task'}
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-semibold text-slate-800 break-words">
+              {task.title || 'Focused Task'}
+            </h2>
+              <button
+                onClick={() => setShowEdit(true)}
+                className="ml-1 px-2 py-1 rounded-md border border-slate-300 text-slate-500 hover:bg-slate-100 hover:text-blue-600 transition text-sm font-medium"
+                title="Edit task"
+              >
+                ✏️ Edit
+              </button>
+          </div>
           <div className="mt-1 text-sm text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-1">
             {planName ? <span className="truncate">Plan: {planName}</span> : null}
             {bucketName ? <span className="truncate">• {bucketName}</span> : null}
@@ -150,6 +162,18 @@ export default function FocusTaskCard({
           {isCompleted ? 'Completed' : 'Mark Complete'}
         </button>
       </div>
+    {showEdit && (
+      <EditTaskModal
+        task={task}
+        onClose={() => setShowEdit(false)}
+        onSave={(updatedTask) => {
+          if (typeof onComplete === 'function') {
+            onComplete(updatedTask.id, updatedTask);
+          }
+          setShowEdit(false);
+        }}
+      />
+    )}
     </div>
   );
 }

@@ -81,11 +81,26 @@ export default function EditTaskModal({
     const description = formData.get('description');
 
     try {
+      // Clean up assignments - remove read-only properties
+      const cleanedAssignments = {};
+      Object.keys(assignments).forEach(userId => {
+        if (assignments[userId]) {
+          // Only include the required properties, not read-only ones like assignedBy
+          cleanedAssignments[userId] = {
+            '@odata.type': '#microsoft.graph.plannerAssignment',
+            orderHint: ' !'
+          };
+        } else {
+          // Set to null to remove assignment
+          cleanedAssignments[userId] = null;
+        }
+      });
+
       // Update basic task properties (title, priority, due date, bucket, assignments)
       const updateData = {
         title,
         priority,
-        assignments
+        assignments: cleanedAssignments
       };
 
       // Add bucket if changed

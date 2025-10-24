@@ -577,6 +577,7 @@ function App() {
             bucketName={getBucketName(focusTask)}
             onComplete={() => handleCompleteTask(focusTask.id)}
             onEdit={handleEditTask}
+            onUnfocus={handleSetFocusTask}
             formatTime={formatTime}
           />
         )}

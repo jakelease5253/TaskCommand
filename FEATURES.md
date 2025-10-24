@@ -68,9 +68,10 @@ A living document to track features, improvements, and changes we want to implem
 - [ ] **Checklist reorder not persisted** to Planner (drag and drop doesn't work at all)
 - [ ] **Checklist cannot complete items** checking the box does nothing
 - [ ] **Slack Phase 1** not yet calling PA flow (awaiting DEV URL + wiring)
-- [ ] Manager/Admin pages are stubs (no data yet)
+- [ ] **Manager/Admin pages** are stubs (no data yet)
 - [ ] **Browser refresh returns use to login screen**
 - [ ] **Priority Queue not persisting on browser refresh**
+- [x] **Setting focus crashing app**
 
 ---
 

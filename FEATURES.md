@@ -9,27 +9,57 @@ A living document to track features, improvements, and changes we want to implem
 ## 🎯 High Priority
 
 ### Features to Add
-- [ ] **Display checklists from task when task is in focus mode**
-  - Show all checklist items associated with the focused task
-  - Items should be clearly visible and organized
-  - Display completion status for each item
-  
-- [ ] **Ability to complete items from checklist when task is in focus mode**
-  - Users can check off checklist items directly from focus mode
-  - Updates should sync immediately with Microsoft Planner
-  - Visual feedback when items are completed
-  - Handle ETag-based concurrency control
+- [ ] **Display checklist items along with other task details in focus mode**
+  - Show all checklist items and other task information in focus mode
+  - Include a visual progress bar for tasks with checklists
+  - Display completion status for each checklist item
 
-- [ ] **Real-time sync with Microsoft Planner**
-  - Ensure all changes reflect immediately in Planner
-  - Bidirectional updates (changes in Planner show in TaskCommand)
-  - Handle conflicts gracefully
+- [ ] **Sync completed checklist items with Planner in real time**
+  - Ensure changes to checklist items sync immediately with Microsoft Planner
+  - Handle ETag-based concurrency control
+  - Provide visual confirmation of sync status
+
+- [ ] **Add Environment Banner (DEV Only)**
+  - Display a banner on DEV environment (localhost:3001)
+  - No banner on live/production site (task.fieldworks.com)
+  - Helps prevent confusion between environments
+
+- [ ] **Slack Integration (Phase 1)**
+  - **Basic Reminders**
+    - Daily upcoming tasks summary at beginning of day
+    - Daily kudos summary of completed and focused tasks
+    - Notification when a new task is assigned
+
+### Next Up (Design & Scoping)
+- [ ] **Manager Dashboard (MVP)**
+  - See open tasks across all plans for direct reports
+  - (Naming TBD)
+- [ ] **Admin Dashboard (All Company)**
+  - See open tasks across all plans for all of FieldWorks
+  - (Naming TBD)
+- [ ] **Settings (Foundational)**
+  - Manage individual settings related to Slack integration
+  - Consider admin settings for who can see whose tasks (or leverage Entra ID hierarchy)
+  - Super Admin role controls access to the All Company Dashboard
 
 ---
 
 ## 🔮 Future Enhancements
 
+- The previously listed high-priority items regarding focus checklist completion and real-time sync are now merged into the above features for clarity.
+
 ### Core Functionality
+- [ ] **DEV-only favicon badge**
+  - Show a small “DEV” indicator in the tab icon when running on localhost:3001
+
+- [ ] **Backend → Slack API (replace PA relay)**
+  - Create secure backend endpoint (Azure Functions / SWA API) for Slack calls
+  - Store Slack Bot Token server-side (Key Vault/App Settings)
+  - Support: chat.postMessage, scheduling (optional), attachments/blocks
+  - AuthN/AuthZ via Entra (only TaskCommand calls allowed)
+  - Migrate Phase 1 (daily reminders, kudos, new assignment) to backend
+  - Decommission PA flow once parity is verified
+
 - [ ] **Search tasks**
   - Global search functionality to quickly find tasks across all plans
   - Search by title, description, tags, assignee
@@ -139,6 +169,8 @@ A living document to track features, improvements, and changes we want to implem
   - Visual progress indicators
 
 ### Manager Interface 🔥 (Key Differentiator)
+- [ ] **Open tasks across all plans for direct reports (MVP)**
+  - Single pane view; filter by status/priority/due date
 - [ ] **View direct reports' tasks**
   - See team member task lists
   - Monitor progress and workload
@@ -170,6 +202,13 @@ A living document to track features, improvements, and changes we want to implem
   - Department-level filtering
   - Organization-wide views
 
+### Admin Dashboard (All Company)
+- [ ] **Org-wide open tasks**
+  - See open tasks across all plans for all FieldWorks users
+  - Filters: department, project/plan, bucket, due date
+- [ ] **Access controls**
+  - Visible only to Super Admins (configurable in Settings)
+
 ### Settings & Configuration
 - [ ] **Settings Page**
   - User preferences and configurations
@@ -178,11 +217,18 @@ A living document to track features, improvements, and changes we want to implem
   - Display preferences
   - Theme customization
   - Default views
+  - Per-user Slack integration preferences (enable/disable digests, reminder times, channels/DM)
+  - Optional: Use Entra ID manager hierarchy to determine default visibility
 
 - [ ] **Notification preferences**
   - Choose which notifications to receive
   - Channel preferences (in-app, Slack, email)
   - Quiet hours configuration
+
+- [ ] **Visibility & Roles**
+  - Define roles: User, Manager, Admin, Super Admin
+  - Configure who can see whose tasks (override or inherit from Entra ID)
+  - Super Admin can enable/disable access to All Company Dashboard
 
 ### Dashboard Improvements
 - [ ] **Expanded Dashboard Capabilities**
@@ -238,13 +284,14 @@ A living document to track features, improvements, and changes we want to implem
 - All permissions already granted - ready to implement features
 - ETag-based concurrency control required for Planner updates
 - Consider rate limiting for bulk operations
-
-### Future Considerations
-- Could be commercialized for other companies using Planner
-- Build as internal tool first, prove value, then decide on external offering
-- Potential to become standard at other organizations
-- Keep architecture clean for potential multi-tenant future
+- Adopt modular architecture to avoid single-file bloat: feature-based folders (`features/focus`, `features/slack`, `features/dashboards`)
+- Introduce a typed API client layer for Graph + Slack (with retry, ETag handling, and rate limiting)
+- Centralized state management (e.g., Zustand or Redux Toolkit) with normalized task entities
+- Route-based code splitting via React Router; lazy load dashboards and reports
+- RBAC guard components and server-side checks where applicable
+- Virtualized task lists for large datasets (e.g., react-window)
+- Background sync & cache (IndexedDB) for resilience and mobile/PWA readiness
 
 ---
 
-**Last Updated:** 2025-10-20
+**Last Updated:** 2025-10-23

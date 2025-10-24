@@ -1,14 +1,75 @@
 import { useState, useEffect } from 'react';
 
-const REDIRECT_URI = import.meta.env.VITE_REDIRECT_URI || 'http://localhost:3000';
+// Map ports to environments:
+// - main (local): http://localhost:3000
+// - dev  (local): http://localhost:3001
+// - prod: whatever your deployed origin is
+const ORIGIN = window.location.origin;
+const PORT = window.location.port;
+const APP_ENV = PORT === '3001' ? 'dev' : (PORT === '3000' ? 'main' : 'prod');
+
+const REDIRECT_URI = ORIGIN;
+
+// Allow env-specific client/tenant overrides with sensible fallbacks
+const MSAL_CLIENT_ID =
+  (APP_ENV === 'dev'  ? import.meta.env.VITE_MSAL_CLIENT_ID_DEV  :
+   APP_ENV === 'main' ? import.meta.env.VITE_MSAL_CLIENT_ID_MAIN :
+                        import.meta.env.VITE_MSAL_CLIENT_ID) ||
+  import.meta.env.VITE_MSAL_CLIENT_ID;
+
+const MSAL_TENANT_ID =
+  (APP_ENV === 'dev'  ? import.meta.env.VITE_MSAL_TENANT_ID_DEV  :
+   APP_ENV === 'main' ? import.meta.env.VITE_MSAL_TENANT_ID_MAIN :
+                        import.meta.env.VITE_MSAL_TENANT_ID) ||
+  import.meta.env.VITE_MSAL_TENANT_ID;
+
+const GRAPH_SCOPES =
+  (APP_ENV === 'dev'
+    ? (import.meta.env.VITE_GRAPH_SCOPES_DEV || import.meta.env.VITE_GRAPH_SCOPES)
+    : APP_ENV === 'main'
+    ? (import.meta.env.VITE_GRAPH_SCOPES_MAIN || import.meta.env.VITE_GRAPH_SCOPES)
+    : import.meta.env.VITE_GRAPH_SCOPES || 'Tasks.ReadWrite,Group.Read.All,User.Read'
+  ).split(',');
+
 const MSAL_CONFIG = {
   auth: {
-    clientId: import.meta.env.VITE_MSAL_CLIENT_ID || '8724797a-a121-4f6c-bc18-2cc72266a686',
-    authority: `https://login.microsoftonline.com/${import.meta.env.VITE_MSAL_TENANT_ID || '327a958f-68a1-40f6-aada-48a87827f0b1'}`,
-    redirectUri: REDIRECT_URI
+    clientId: MSAL_CLIENT_ID || '8724797a-a121-4f6c-bc18-2cc72266a686',
+    authority: `https://login.microsoftonline.com/${MSAL_TENANT_ID || '327a958f-68a1-40f6-aada-48a87827f0b1'}`,
+    redirectUri: REDIRECT_URI,
+    postLogoutRedirectUri: REDIRECT_URI
   }
 };
-const GRAPH_SCOPES = (import.meta.env.VITE_GRAPH_SCOPES || 'Tasks.ReadWrite,Group.Read.All,User.Read').split(',');
+
+// Tiny floating banner to show current environment. Hidden in prod.
+function ensureEnvBadge() {
+  try {
+    if (APP_ENV === 'prod') return;
+    const ID = 'env-badge';
+    if (document.getElementById(ID)) return;
+    const el = document.createElement('div');
+    el.id = ID;
+    el.textContent = APP_ENV.toUpperCase();
+    Object.assign(el.style, {
+      position: 'fixed',
+      bottom: '8px',
+      left: '8px',
+      padding: '6px 10px',
+      fontSize: '12px',
+      fontWeight: '600',
+      background: APP_ENV === 'dev' ? '#ffe08a' : '#b3e6ff', // dev = yellow, main = blue
+      color: '#000',
+      border: '1px solid rgba(0,0,0,0.2)',
+      borderRadius: '6px',
+      zIndex: '2147483647',
+      boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+      letterSpacing: '0.5px',
+      fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif'
+    });
+    document.body.appendChild(el);
+  } catch (_) {
+    // no-op
+  }
+}
 
 export function useAuth() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -17,6 +78,7 @@ export function useAuth() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    ensureEnvBadge();
     const hash = window.location.hash;
     if (hash && hash.includes('access_token')) {
       acquireToken();

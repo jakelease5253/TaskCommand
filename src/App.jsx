@@ -15,6 +15,7 @@ import PriorityQueue from './components/tasks/PriorityQueue';
 import NewTaskModal from './components/tasks/NewTaskModal';
 import EditTaskModal from './components/tasks/EditTaskModal';
 import PriorityLimitModal from './components/modals/PriorityLimitModal';
+import { mapPlannerChecklist, sortByOrderHint } from './components/focus/mapPlannerChecklist';
 
 function App() {
   const auth = useAuth();
@@ -232,6 +233,76 @@ function App() {
   };
 
   // Task actions
+  async function handleToggleChecklist(focusedTaskWithDetails, item) {
+  // optimistic flip (preserve order)
+  setFocusTaskDetails(prev => {
+    const next = (prev?.checklist || []).map(c =>
+      c.id === item.id ? { ...c, isChecked: !c.isChecked } : c
+    );
+    return { ...prev, checklist: next };
+  });
+
+  try {
+    if (typeof taskManager.updateChecklistItem === 'function') {
+      const { etag: newEtag } = await taskManager.updateChecklistItem(
+        focusedTaskWithDetails.id,
+        item.id,
+        !item.isChecked,
+        focusTaskDetails?.etag || '*'
+      );
+      if (newEtag) {
+        setFocusTaskDetails(prev => prev ? { ...prev, etag: newEtag } : prev);
+      }
+      return;
+    }
+
+    // Fallback: call your API proxy
+    const res = await fetch(`/api/planner/tasks/${focusedTaskWithDetails.id}/checklist/${item.id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'If-Match': focusTaskDetails?.etag || '*'
+      },
+      body: JSON.stringify({ isChecked: !item.isChecked })
+    });
+
+    if (res.status === 412) {
+      // ETag mismatch — refetch details
+      const fresh = await taskManager.fetchTaskDetails(focusedTaskWithDetails.id);
+      const list = sortByOrderHint(mapPlannerChecklist(fresh?.checklist));
+      setFocusTaskDetails({
+        ...fresh,
+        checklist: list,
+        etag: fresh?.['@odata.etag'] || null
+      });
+      return;
+    }
+
+    if (!res.ok) throw new Error(`Checklist update failed: ${res.status}`);
+
+    try {
+      const payload = await res.json();
+      if (payload?.etag) {
+        setFocusTaskDetails(prev => prev ? { ...prev, etag: payload.etag } : prev);
+      }
+    } catch {}
+  } catch (e) {
+    // rollback
+    setFocusTaskDetails(prev => {
+      if (!prev) return prev;
+      const rolled = (prev.checklist || []).map(c =>
+        c.id === item.id ? { ...c, isChecked: item.isChecked } : c
+      );
+      return { ...prev, checklist: rolled };
+    });
+  }
+}
+
+async function handleReorderChecklist(focusedTaskWithDetails, newOrderedItems) {
+  // Optimistic update only — keep the order the user set
+  setFocusTaskDetails(prev => (prev ? { ...prev, checklist: newOrderedItems } : prev));
+}
+
   const handleCompleteTask = async (taskId) => {
     try {
       const task = await taskManager.completeTask(taskId);
@@ -270,6 +341,76 @@ function App() {
     }
   };
 
+    async function handleToggleChecklist(focusedTaskWithDetails, item) {
+      // optimistic local flip
+      setFocusTaskDetails(prev => {
+        const next = (prev?.checklist || []).map(c =>
+          c.id === item.id ? { ...c, isChecked: !c.isChecked } : c
+        );
+        return { ...prev, checklist: next };
+      });
+
+      try {
+        // Try a taskManager method if available
+        if (typeof taskManager.updateChecklistItem === 'function') {
+          const { etag: newEtag } = await taskManager.updateChecklistItem(
+            focusedTaskWithDetails.id,
+            item.id,
+            !item.isChecked,
+            focusTaskDetails?.etag || '*'
+          );
+          if (newEtag) {
+            setFocusTaskDetails(prev => ({ ...prev, etag: newEtag }));
+          }
+          return;
+        }
+
+        // Fallback: call your API proxy directly
+        const res = await fetch(`/api/planner/tasks/${focusedTaskWithDetails.id}/checklist/${item.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'If-Match': focusTaskDetails?.etag || '*',
+          },
+          body: JSON.stringify({ isChecked: !item.isChecked }),
+        });
+
+        if (res.status === 412) {
+          // ETag mismatch — refresh details
+          const fresh = await taskManager.fetchTaskDetails(focusedTaskWithDetails.id);
+          setFocusTaskDetails({
+            ...fresh,
+            checklist: mapPlannerChecklist(fresh?.checklist),
+            etag: fresh?.['@odata.etag'] || null,
+          });
+          return;
+        }
+
+        if (!res.ok) {
+          throw new Error(`Checklist update failed: ${res.status}`);
+        }
+
+        try {
+          const payload = await res.json();
+          if (payload?.etag) {
+            setFocusTaskDetails(prev => ({ ...prev, etag: payload.etag }));
+          }
+        } catch {
+          // ignore if no JSON returned
+        }
+      } catch (e) {
+        console.error(e);
+        // rollback on any failure
+        setFocusTaskDetails(prev => {
+          const rolled = (prev?.checklist || []).map(c =>
+            c.id === item.id ? { ...c, isChecked: item.isChecked } : c
+          );
+          return { ...prev, checklist: rolled };
+        });
+      }
+    }
+
+  
   const handleSetFocusTask = async (task) => {
     if (focusTask?.id === task.id) {
       // Unfocusing - save the current time and stop the timer
@@ -298,9 +439,14 @@ function App() {
       focusTimer.setStartTime(Date.now() - (savedTime * 1000));
       focusTimer.setIsRunning(true);
       
-      // Fetch task details (including description)
+      // Fetch task details (description, checklist lives here)
       const details = await taskManager.fetchTaskDetails(task.id);
-      setFocusTaskDetails(details);
+      const checklistArr = mapPlannerChecklist(details?.checklist);
+      setFocusTaskDetails({
+        ...details,
+        checklist: sortByOrderHint(checklistArr),
+        etag: details?.['@odata.etag'] || null
+      });
     }
   };
 
@@ -386,6 +532,66 @@ function App() {
 
     handleDragEnd();
   };
+
+  async function handleReorderChecklist(focusedTaskWithDetails, newOrderedItems) {
+  // Optimistic local order update
+  setFocusTaskDetails(prev => {
+    if (!prev) return prev;
+    return { ...prev, checklist: newOrderedItems };
+  });
+
+  try {
+    // Let the backend compute proper orderHints using neighbors
+    // Adjust the path to your API as needed.
+    const res = await fetch(`/api/planner/tasks/${focusedTaskWithDetails.id}/checklist/reorder`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'If-Match': focusTaskDetails?.etag || '*'
+      },
+      body: JSON.stringify({
+        order: newOrderedItems.map(i => i.id)
+      })
+    });
+
+    if (res.status === 412) {
+      // ETag mismatch — refetch details
+      const fresh = await taskManager.fetchTaskDetails(focusedTaskWithDetails.id);
+      const list = sortByOrderHint(mapPlannerChecklist(fresh?.checklist));
+      setFocusTaskDetails({
+        ...fresh,
+        checklist: list,
+        etag: fresh?.['@odata.etag'] || null
+      });
+      return;
+    }
+
+    if (!res.ok) {
+      throw new Error(`Reorder failed: ${res.status}`);
+    }
+
+    // If your API returns a new etag and/or updated orderHints, apply them:
+    try {
+      const payload = await res.json();
+      if (payload?.etag) {
+        setFocusTaskDetails(prev => prev ? { ...prev, etag: payload.etag } : prev);
+      }
+      if (Array.isArray(payload?.checklist)) {
+        setFocusTaskDetails(prev => prev ? { ...prev, checklist: sortByOrderHint(payload.checklist) } : prev);
+      }
+    } catch {
+      // ok if no JSON returned
+    }
+  } catch (e) {
+    console.error(e);
+    // Roll back to sorted-by-hint order from previous state
+    setFocusTaskDetails(prev => {
+      if (!prev) return prev;
+      return { ...prev, checklist: sortByOrderHint(prev.checklist) };
+    });
+  }
+}
+
 
   // Dashboard metrics
   const getDateRangeStart = () => {
@@ -512,14 +718,21 @@ function App() {
         />
 
         {focusTask && (
-          <FocusTaskCard 
-            task={{...focusTask, description: focusTaskDetails?.description}}
-            elapsed={focusTimer.elapsed}
-            planName={taskManager.plans[focusTask.planId]}
-            bucketName={getBucketName(focusTask)}
-            onComplete={() => handleCompleteTask(focusTask.id)}
-            formatTime={formatTime}
-          />
+        <FocusTaskCard
+          task={{
+            ...focusTask,
+            description: focusTaskDetails?.description,
+            checklist: focusTaskDetails?.checklist,
+            etag: focusTaskDetails?.etag
+          }}
+          elapsed={focusTimer.elapsed}
+          planName={taskManager.plans[focusTask.planId]}
+          bucketName={getBucketName(focusTask)}
+          onComplete={() => handleCompleteTask(focusTask.id)}
+          formatTime={formatTime}
+          onToggleChecklist={handleToggleChecklist}
+          onReorderChecklist={handleReorderChecklist}
+        />
         )}
 
         {/* Two-Column Layout */}

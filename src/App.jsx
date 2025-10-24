@@ -98,6 +98,8 @@ function App() {
   }, []);
 
   // Load priority queue from localStorage
+  const [priorityQueueLoaded, setPriorityQueueLoaded] = useState(false);
+
   useEffect(() => {
     const saved = localStorage.getItem('priorityQueue');
     if (saved) {
@@ -107,12 +109,16 @@ function App() {
         console.error('Error loading priority queue:', err);
       }
     }
+    // Mark as loaded even if there was nothing in storage
+    setPriorityQueueLoaded(true);
   }, []);
 
-  // Save priority queue to localStorage
+  // Save priority queue to localStorage (but not on initial render before load completes)
   useEffect(() => {
-    localStorage.setItem('priorityQueue', JSON.stringify(priorityQueue));
-  }, [priorityQueue]);
+    if (priorityQueueLoaded) {
+      localStorage.setItem('priorityQueue', JSON.stringify(priorityQueue));
+    }
+  }, [priorityQueue, priorityQueueLoaded]);
 
   // Load focus task from localStorage
   useEffect(() => {

@@ -72,6 +72,7 @@ A living document to track features, improvements, and changes we want to implem
 - [ ] **Browser refresh returns use to login screen**
 - [ ] **Priority Queue not persisting on browser refresh**
 - [x] **Setting focus crashing app**
+- [ ] **Can't edit tasks from task list** button doesn't work
 
 ---
 

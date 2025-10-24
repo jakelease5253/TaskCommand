@@ -96,15 +96,20 @@ export default function EditTaskModal({
         }
       });
 
-      // Update basic task properties (title, priority, due date, bucket, assignments)
+      // Update basic task properties (title, priority, due date, plan, bucket, assignments)
       const updateData = {
         title,
         priority,
         assignments: cleanedAssignments
       };
 
-      // Add bucket if changed
-      if (selectedBucketId && selectedBucketId !== task.bucketId) {
+      // Add planId if changed
+      if (selectedPlanId && selectedPlanId !== task.planId) {
+        updateData.planId = selectedPlanId;
+      }
+
+      // Add bucket if changed (or if plan changed, must update bucket)
+      if (selectedBucketId && (selectedBucketId !== task.bucketId || selectedPlanId !== task.planId)) {
         updateData.bucketId = selectedBucketId;
       }
 
@@ -179,11 +184,36 @@ export default function EditTaskModal({
   };
 
   // Handle plan change
-  const handlePlanChange = (e) => {
+  const handlePlanChange = async (e) => {
     const planId = e.target.value;
     setSelectedPlanId(planId);
     // Reset bucket when plan changes
     setSelectedBucketId('');
+    // Clear assignments when plan changes (users from old plan won't be in new plan)
+    setAssignments({});
+
+    // Fetch users for the new plan
+    if (planId && accessToken) {
+      try {
+        const planResponse = await fetch(
+          `https://graph.microsoft.com/v1.0/planner/plans/${planId}`,
+          { headers: { 'Authorization': `Bearer ${accessToken}` } }
+        );
+        const planData = await planResponse.json();
+
+        const membersResponse = await fetch(
+          `https://graph.microsoft.com/v1.0/groups/${planData.owner}/members`,
+          { headers: { 'Authorization': `Bearer ${accessToken}` } }
+        );
+        const membersData = await membersResponse.json();
+        setUsers(membersData.value || []);
+      } catch (err) {
+        console.error('Error fetching users for new plan:', err);
+        setUsers([]);
+      }
+    } else {
+      setUsers([]);
+    }
   };
 
   // Handle assignment toggle

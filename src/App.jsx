@@ -665,10 +665,22 @@ function App() {
             setEditingTask(null);
             setEditingTaskDetails(null);
           }}
-          onTaskUpdated={() => {
+          onTaskUpdated={async () => {
+            const wasEditingFocusedTask = focusTask && editingTask.id === focusTask.id;
             setEditingTask(null);
             setEditingTaskDetails(null);
-            taskManager.fetchAllTasks();
+            await taskManager.fetchAllTasks();
+
+            // If we edited the focused task, refresh it with updated data
+            if (wasEditingFocusedTask) {
+              const updatedTask = taskManager.tasks.find(t => t.id === focusTask.id);
+              if (updatedTask) {
+                setFocusTask(updatedTask);
+                // Also refresh task details
+                const details = await taskManager.fetchTaskDetails(updatedTask.id);
+                setFocusTaskDetails(details);
+              }
+            }
           }}
         />
       )}

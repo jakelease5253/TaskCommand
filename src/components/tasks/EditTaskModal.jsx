@@ -32,6 +32,14 @@ export default function EditTaskModal({
         setTaskEtag(taskData['@odata.etag']);
         setAssignments(taskData.assignments || {});
 
+        // Update plan and bucket from fresh API data
+        if (taskData.planId) {
+          setSelectedPlanId(taskData.planId);
+        }
+        if (taskData.bucketId) {
+          setSelectedBucketId(taskData.bucketId);
+        }
+
         // Fetch task details to get its etag and description
         const detailsResponse = await fetch(
           `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`,
@@ -42,9 +50,9 @@ export default function EditTaskModal({
         setCurrentDescription(detailsData.description || '');
 
         // Fetch group members for assignment
-        if (task.planId) {
+        if (taskData.planId) {
           const planResponse = await fetch(
-            `https://graph.microsoft.com/v1.0/planner/plans/${task.planId}`,
+            `https://graph.microsoft.com/v1.0/planner/plans/${taskData.planId}`,
             { headers: { 'Authorization': `Bearer ${accessToken}` } }
           );
           const planData = await planResponse.json();

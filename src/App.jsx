@@ -114,6 +114,58 @@ function App() {
     localStorage.setItem('priorityQueue', JSON.stringify(priorityQueue));
   }, [priorityQueue]);
 
+  // Load focus task from localStorage
+  useEffect(() => {
+    const savedFocusTask = localStorage.getItem('focusTask');
+    const savedFocusTaskDetails = localStorage.getItem('focusTaskDetails');
+    const savedFocusTimerRunning = localStorage.getItem('focusTimerRunning');
+
+    if (savedFocusTask) {
+      try {
+        const task = JSON.parse(savedFocusTask);
+        setFocusTask(task);
+
+        // Restore task details if available
+        if (savedFocusTaskDetails) {
+          setFocusTaskDetails(JSON.parse(savedFocusTaskDetails));
+        }
+
+        // Restore the timer if there was saved focus time for this task
+        const savedTimes = localStorage.getItem('taskFocusTimes');
+        if (savedTimes) {
+          const times = JSON.parse(savedTimes);
+          if (times[task.id]) {
+            focusTimer.setElapsed(times[task.id]);
+            // Resume timer if it was running before refresh
+            if (savedFocusTimerRunning === 'true') {
+              focusTimer.setStartTime(Date.now() - (times[task.id] * 1000));
+              focusTimer.setIsRunning(true);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error loading focus task:', err);
+      }
+    }
+  }, []);
+
+  // Save focus task to localStorage whenever it changes
+  useEffect(() => {
+    if (focusTask) {
+      localStorage.setItem('focusTask', JSON.stringify(focusTask));
+      if (focusTaskDetails) {
+        localStorage.setItem('focusTaskDetails', JSON.stringify(focusTaskDetails));
+      }
+      // Save timer running state
+      localStorage.setItem('focusTimerRunning', focusTimer.isRunning.toString());
+    } else {
+      // Clear localStorage when focus task is cleared
+      localStorage.removeItem('focusTask');
+      localStorage.removeItem('focusTaskDetails');
+      localStorage.removeItem('focusTimerRunning');
+    }
+  }, [focusTask, focusTaskDetails, focusTimer.isRunning]);
+
   // Fetch user profile and tasks when authenticated
   useEffect(() => {
     if (auth.isAuthenticated && auth.accessToken && !hasFetchedData.current) {

@@ -408,7 +408,7 @@ export default function EditTaskModal({
             </div>
           </div>
 
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-3 pt-6">
             <button
               type="button"
               onClick={onClose}

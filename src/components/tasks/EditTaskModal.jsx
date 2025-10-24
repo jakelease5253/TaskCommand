@@ -14,6 +14,10 @@ export default function EditTaskModal({
   const [taskEtag, setTaskEtag] = useState(null);
   const [detailsEtag, setDetailsEtag] = useState(null);
   const [currentDescription, setCurrentDescription] = useState('');
+  const [selectedPlanId, setSelectedPlanId] = useState(task.planId || '');
+  const [selectedBucketId, setSelectedBucketId] = useState(task.bucketId || '');
+  const [assignments, setAssignments] = useState({});
+  const [users, setUsers] = useState([]);
 
   // Fetch the current task and details to get etags
   useEffect(() => {
@@ -26,6 +30,7 @@ export default function EditTaskModal({
         );
         const taskData = await taskResponse.json();
         setTaskEtag(taskData['@odata.etag']);
+        setAssignments(taskData.assignments || {});
 
         // Fetch task details to get its etag and description
         const detailsResponse = await fetch(
@@ -35,6 +40,22 @@ export default function EditTaskModal({
         const detailsData = await detailsResponse.json();
         setDetailsEtag(detailsData['@odata.etag']);
         setCurrentDescription(detailsData.description || '');
+
+        // Fetch group members for assignment
+        if (task.planId) {
+          const planResponse = await fetch(
+            `https://graph.microsoft.com/v1.0/planner/plans/${task.planId}`,
+            { headers: { 'Authorization': `Bearer ${accessToken}` } }
+          );
+          const planData = await planResponse.json();
+
+          const membersResponse = await fetch(
+            `https://graph.microsoft.com/v1.0/groups/${planData.owner}/members`,
+            { headers: { 'Authorization': `Bearer ${accessToken}` } }
+          );
+          const membersData = await membersResponse.json();
+          setUsers(membersData.value || []);
+        }
       } catch (err) {
         console.error('Error fetching task data:', err);
         setError('Failed to load task data');
@@ -60,11 +81,17 @@ export default function EditTaskModal({
     const description = formData.get('description');
 
     try {
-      // Update basic task properties (title, priority, due date)
+      // Update basic task properties (title, priority, due date, bucket, assignments)
       const updateData = {
         title,
-        priority
+        priority,
+        assignments
       };
+
+      // Add bucket if changed
+      if (selectedBucketId && selectedBucketId !== task.bucketId) {
+        updateData.bucketId = selectedBucketId;
+      }
 
       if (dueDate) {
         // Parse the date as local and set to noon UTC to avoid timezone issues
@@ -129,6 +156,33 @@ export default function EditTaskModal({
     return date.toISOString().split('T')[0];
   };
 
+  // Handle plan change
+  const handlePlanChange = (e) => {
+    const planId = e.target.value;
+    setSelectedPlanId(planId);
+    // Reset bucket when plan changes
+    setSelectedBucketId('');
+  };
+
+  // Handle assignment toggle
+  const toggleAssignment = (userId) => {
+    setAssignments(prev => {
+      const newAssignments = { ...prev };
+      if (newAssignments[userId]) {
+        delete newAssignments[userId];
+      } else {
+        newAssignments[userId] = {
+          '@odata.type': '#microsoft.graph.plannerAssignment',
+          orderHint: ' !'
+        };
+      }
+      return newAssignments;
+    });
+  };
+
+  // Get filtered buckets for selected plan
+  const filteredBuckets = buckets?.filter(b => b.planId === selectedPlanId) || [];
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -178,6 +232,77 @@ export default function EditTaskModal({
               placeholder="Enter task description"
               rows="4"
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Plan *
+              </label>
+              <select
+                value={selectedPlanId}
+                onChange={handlePlanChange}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                required
+              >
+                <option value="">Select a plan</option>
+                {plans?.map(plan => (
+                  <option key={plan.id} value={plan.id}>
+                    {plan.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Bucket *
+              </label>
+              <select
+                value={selectedBucketId}
+                onChange={(e) => setSelectedBucketId(e.target.value)}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                required
+                disabled={!selectedPlanId}
+              >
+                <option value="">Select a bucket</option>
+                {filteredBuckets.map(bucket => (
+                  <option key={bucket.id} value={bucket.id}>
+                    {bucket.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Assign To
+            </label>
+            <div className="border border-slate-300 rounded-lg p-3 max-h-48 overflow-y-auto">
+              {users.length === 0 ? (
+                <p className="text-sm text-slate-500">No users available</p>
+              ) : (
+                <div className="space-y-2">
+                  {users.map(user => (
+                    <label
+                      key={user.id}
+                      className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!assignments[user.id]}
+                        onChange={() => toggleAssignment(user.id)}
+                        className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                      />
+                      <span className="text-sm text-slate-700">
+                        {user.displayName || user.userPrincipalName}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

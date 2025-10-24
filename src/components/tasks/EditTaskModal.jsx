@@ -180,8 +180,11 @@ export default function EditTaskModal({
     });
   };
 
-  // Get filtered buckets for selected plan
-  const filteredBuckets = buckets?.filter(b => b.planId === selectedPlanId) || [];
+  // Get buckets for selected plan (buckets is an object with planId as keys)
+  const filteredBuckets = selectedPlanId ? (buckets?.[selectedPlanId] || []) : [];
+
+  // Convert plans object to array for dropdown
+  const plansArray = plans ? Object.entries(plans).map(([id, title]) => ({ id, title })) : [];
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -246,7 +249,7 @@ export default function EditTaskModal({
                 required
               >
                 <option value="">Select a plan</option>
-                {plans?.map(plan => (
+                {plansArray.map(plan => (
                   <option key={plan.id} value={plan.id}>
                     {plan.title}
                   </option>

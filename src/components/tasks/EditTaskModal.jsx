@@ -73,7 +73,8 @@ export default function EditTaskModal({
     if (task && accessToken) {
       fetchTaskData();
     }
-  }, [task, accessToken]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task.id, accessToken]); // Only depend on task.id, not the entire task object
 
   if (!task) return null;
 

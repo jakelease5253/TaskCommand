@@ -115,7 +115,7 @@ export default function FocusTaskCard({
           )}
         </div>
 
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 ml-6">
           {onEdit && (
             <button
               type="button"

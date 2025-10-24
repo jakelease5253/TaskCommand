@@ -570,12 +570,13 @@ function App() {
         />
 
         {focusTask && (
-          <FocusTaskCard 
+          <FocusTaskCard
             task={{...focusTask, description: focusTaskDetails?.description}}
             elapsed={focusTimer.elapsed}
             planName={taskManager.plans[focusTask.planId]}
             bucketName={getBucketName(focusTask)}
             onComplete={() => handleCompleteTask(focusTask.id)}
+            onEdit={handleEditTask}
             formatTime={formatTime}
           />
         )}

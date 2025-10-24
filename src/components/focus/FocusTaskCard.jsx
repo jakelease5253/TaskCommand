@@ -7,6 +7,7 @@ export default function FocusTaskCard({
   planName,
   bucketName,
   onComplete,
+  onEdit,
   formatTime,
 }) {
   const getDaysUntilDue = (task) => {
@@ -115,6 +116,16 @@ export default function FocusTaskCard({
         </div>
 
         <div className="flex flex-col gap-2">
+          {onEdit && (
+            <button
+              type="button"
+              onClick={() => onEdit(task)}
+              className="px-6 py-3 rounded-xl bg-white border-2 border-slate-300 text-slate-700 hover:bg-slate-50 transition-all font-medium shadow-md hover:shadow-lg flex items-center gap-2"
+            >
+              <Edit />
+              Edit Task
+            </button>
+          )}
           <button
             type="button"
             onClick={onComplete}

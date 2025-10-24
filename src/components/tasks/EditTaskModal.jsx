@@ -246,6 +246,9 @@ export default function EditTaskModal({
   // Convert plans object to array for dropdown
   const plansArray = plans ? Object.entries(plans).map(([id, title]) => ({ id, title })) : [];
 
+  // Check if plans/buckets data is loaded
+  const isDataLoaded = plansArray.length > 0;
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -267,6 +270,13 @@ export default function EditTaskModal({
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
               <div className="flex-shrink-0 mt-0.5"><AlertCircle /></div>
               <p className="text-sm text-red-800">{error}</p>
+            </div>
+          )}
+
+          {!isDataLoaded && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
+              <div className="flex-shrink-0 mt-0.5"><AlertCircle /></div>
+              <p className="text-sm text-blue-800">Loading plans and buckets data...</p>
             </div>
           )}
 
@@ -408,10 +418,10 @@ export default function EditTaskModal({
             </button>
             <button
               type="submit"
-              disabled={loading || !taskEtag || !detailsEtag}
+              disabled={loading || !taskEtag || !detailsEtag || !isDataLoaded}
               className="flex-1 px-6 py-3 gradient-primary text-white rounded-xl transition-all font-medium disabled:opacity-50 shadow-md hover:shadow-lg"
             >
-              {loading ? "Updating..." : "Update Task"}
+              {loading ? "Updating..." : !isDataLoaded ? "Loading..." : "Update Task"}
             </button>
           </div>
         </form>

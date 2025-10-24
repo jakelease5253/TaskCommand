@@ -156,7 +156,14 @@ export default function EditTaskModal({
         }
       }
 
-      onTaskUpdated();
+      // Call the callback if it exists
+      if (typeof onTaskUpdated === 'function') {
+        onTaskUpdated();
+      } else {
+        console.error('onTaskUpdated is not a function:', onTaskUpdated);
+        // Close modal anyway
+        onClose();
+      }
     } catch (err) {
       console.error('Error updating task:', err);
       setError(err.message);

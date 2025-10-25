@@ -124,6 +124,14 @@ export const Filter = (p) => (
   </Svg>
 );
 
+export const Archive = (p) => (
+  <Svg {...p}>
+    <polyline points="21 8 21 21 3 21 3 8" />
+    <rect x="1" y="3" width="22" height="5" />
+    <line x1="10" y1="12" x2="14" y2="12" />
+  </Svg>
+);
+
 export const SortAsc = (p) => (
   <Svg {...p}>
     <line x1="12" y1="5" x2="12" y2="19" />
@@ -215,4 +223,5 @@ export default {
   Award,
   Zap,
   Filter,
+  Archive,
 };

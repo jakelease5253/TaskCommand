@@ -1,14 +1,22 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { AlertCircle, Users, Calendar, Target, TrendingUp, Archive } from "../../../components/ui/icons";
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:7071';
+
 export default function ManagerDashboard({
-  tasks,
-  plans,
-  buckets,
-  userProfiles,
   accessToken,
   onEditTask,
 }) {
+  // Backend data state
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [companyData, setCompanyData] = useState({
+    tasks: [],
+    plans: {},
+    buckets: {},
+    userProfiles: {}
+  });
+
   // Filter state
   const [selectedAssignees, setSelectedAssignees] = useState([]);
   const [selectedPlans, setSelectedPlans] = useState([]);
@@ -20,10 +28,53 @@ export default function ManagerDashboard({
   const [sortBy, setSortBy] = useState('dueDate');
   const [sortDirection, setSortDirection] = useState('asc');
 
+  // Fetch company-wide data from backend
+  useEffect(() => {
+    const fetchCompanyTasks = async () => {
+      if (!accessToken) return;
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        console.log('Fetching company-wide tasks from backend...');
+        const response = await fetch(`${BACKEND_URL}/api/tasks/company`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        console.log('Company tasks received:', result);
+
+        setCompanyData({
+          tasks: result.data.tasks || [],
+          plans: result.data.plans || {},
+          buckets: result.data.buckets || {},
+          userProfiles: result.data.userProfiles || {}
+        });
+
+      } catch (err) {
+        console.error('Error fetching company tasks:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCompanyTasks();
+  }, [accessToken]);
+
   // Get all incomplete tasks for metrics and display
   const incompleteTasks = useMemo(() => {
-    return tasks.filter(task => task.percentComplete < 100);
-  }, [tasks]);
+    return companyData.tasks.filter(task => task.percentComplete < 100);
+  }, [companyData.tasks]);
 
   // Calculate metrics
   const metrics = useMemo(() => {
@@ -131,12 +182,40 @@ export default function ManagerDashboard({
     return date.toLocaleDateString();
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+          <p className="mt-4 text-slate-600">Loading company-wide tasks...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="text-red-600 flex-shrink-0 mt-1" />
+          <div>
+            <h3 className="text-lg font-semibold text-red-800">Error Loading Manager Dashboard</h3>
+            <p className="text-sm text-red-700 mt-1">{error}</p>
+            <p className="text-xs text-red-600 mt-2">Make sure the backend is running on {BACKEND_URL}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
         <h2 className="text-2xl font-bold text-slate-800">Manager Dashboard</h2>
-        <p className="text-sm text-slate-600 mt-1">Company-wide task overview and management</p>
+        <p className="text-sm text-slate-600 mt-1">Company-wide task overview • {companyData.tasks.length} total tasks</p>
       </div>
 
       {/* Metrics Cards */}
@@ -263,11 +342,11 @@ export default function ManagerDashboard({
                   <td className="px-4 py-3 text-sm text-slate-800">{task.title}</td>
                   <td className="px-4 py-3 text-sm text-slate-600">
                     {task.assignments ? Object.keys(task.assignments).map(userId =>
-                      userProfiles[userId] || 'User'
+                      companyData.userProfiles[userId] || 'User'
                     ).join(', ') : 'Unassigned'}
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-600">
-                    {plans[task.planId] || 'Unknown'}
+                    {companyData.plans[task.planId] || 'Unknown'}
                   </td>
                   <td className="px-4 py-3 text-sm">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${

@@ -1,6 +1,6 @@
 const { app } = require('@azure/functions');
-const { getAllCompanyTasks } = require('./services/graphClient');
-const { validateUserToken, checkManagerAuthorization } = require('./utils/auth');
+const { getAllCompanyTasks } = require('../../services/graphClient');
+const { validateUserToken, checkManagerAuthorization } = require('../../utils/auth');
 
 /**
  * Azure Function: Get Company Tasks

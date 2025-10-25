@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { AlertCircle, Users, Calendar, Target, TrendingUp, Archive } from "../ui/icons";
+import { AlertCircle, Users, Calendar, Target, TrendingUp, Archive } from "../../../ui/icons";
 
 export default function ManagerDashboard({
   tasks,

@@ -1,10 +1,11 @@
 import React from "react";
-import { BarChart, TrendingUp, Award, Zap } from "../ui/icons";
+import { BarChart, TrendingUp, Award, Zap, ChevronUp } from "../../../components/ui/icons";
 
 export default function Dashboard({
   dateRange,
   setDateRange,
   metrics,
+  onToggleCollapse,
 }) {
   return (
     <div className="mb-8">
@@ -12,6 +13,15 @@ export default function Dashboard({
         <h2 className="text-xl font-semibold text-slate-800">
           Performance Dashboard
         </h2>
+        {onToggleCollapse && (
+          <button
+            onClick={onToggleCollapse}
+            className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+            title="Hide metrics"
+          >
+            <ChevronUp className="text-slate-600" />
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

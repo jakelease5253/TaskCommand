@@ -4,7 +4,7 @@ import App from './App.jsx';
 import './index.css';
 
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import SettingsPage from './features/settings/SettingsPage.jsx';
+import SettingsPage from './features/settings/Settings.jsx';
 import ManagerDashboard from './features/dashboards/manager/ManagerDashboard.jsx';
 import AdminDashboard from './features/dashboards/admin/AdminDashboard.jsx';
 import { RequireRole } from './security/RequireRole.jsx';

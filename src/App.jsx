@@ -541,7 +541,15 @@ function App() {
         showDashboard={showDashboard}
         onToggleDashboard={() => setShowDashboard(!showDashboard)}
         showManagerDashboard={showManagerDashboard}
-        onToggleManagerDashboard={() => setShowManagerDashboard(!showManagerDashboard)}
+        onToggleManagerDashboard={() => {
+          setShowManagerDashboard(!showManagerDashboard);
+          // Ensure only one view is shown at a time
+          if (!showManagerDashboard) {
+            setShowDashboard(false);
+          } else {
+            setShowDashboard(true);
+          }
+        }}
       />
 
       <main className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -576,29 +584,32 @@ function App() {
           />
         )}
 
-        <WorkTimer 
-          elapsed={workTimer.elapsed}
-          isRunning={workTimer.isRunning}
-          onToggle={toggleWorkTimer}
-          onStop={stopWorkTimer}
-          formatTime={formatTime}
-        />
+        {/* Personal View Components */}
+        {!showManagerDashboard && (
+          <>
+            <WorkTimer
+              elapsed={workTimer.elapsed}
+              isRunning={workTimer.isRunning}
+              onToggle={toggleWorkTimer}
+              onStop={stopWorkTimer}
+              formatTime={formatTime}
+            />
 
-        {focusTask && (
-          <FocusTaskCard
-            task={{...focusTask, description: focusTaskDetails?.description}}
-            elapsed={focusTimer.elapsed}
-            planName={taskManager.plans[focusTask.planId]}
-            bucketName={getBucketName(focusTask)}
-            onComplete={() => handleCompleteTask(focusTask.id)}
-            onEdit={handleEditTask}
-            onUnfocus={handleSetFocusTask}
-            formatTime={formatTime}
-          />
-        )}
+            {focusTask && (
+              <FocusTaskCard
+                task={{...focusTask, description: focusTaskDetails?.description}}
+                elapsed={focusTimer.elapsed}
+                planName={taskManager.plans[focusTask.planId]}
+                bucketName={getBucketName(focusTask)}
+                onComplete={() => handleCompleteTask(focusTask.id)}
+                onEdit={handleEditTask}
+                onUnfocus={handleSetFocusTask}
+                formatTime={formatTime}
+              />
+            )}
 
-        {/* Two-Column Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Two-Column Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - All Tasks (2/3 width) */}
           <div className="lg:col-span-2 space-y-4">
             <FilterBar 
@@ -654,6 +665,8 @@ function App() {
             />
           </div>
         </div>
+          </>
+        )}
       </main>
 
       {showNewTaskModal && (

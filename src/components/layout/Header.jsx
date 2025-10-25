@@ -1,11 +1,13 @@
 import React from "react";
-import { BarChart, RefreshCw, LogOut } from "../ui/icons";
+import { BarChart, RefreshCw, LogOut, Users } from "../ui/icons";
 import TaskCommandLogo from "../ui/TaskCommandLogo";
 
 export default function Header({
   user,
   showDashboard = false,
+  showManagerDashboard = false,
   onToggleDashboard,
+  onToggleManagerDashboard,
   onRefresh,
   onLogout,
   loading = false,
@@ -39,6 +41,21 @@ export default function Header({
               <BarChart />
               Dashboard
             </button>
+
+            {onToggleManagerDashboard && (
+              <button
+                type="button"
+                onClick={onToggleManagerDashboard}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
+                  showManagerDashboard
+                    ? "gradient-primary text-white shadow-md"
+                    : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                <Users />
+                Manager View
+              </button>
+            )}
 
             <button
               type="button"

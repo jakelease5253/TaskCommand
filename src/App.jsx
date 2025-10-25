@@ -7,6 +7,7 @@ import { useTimer } from './hooks/useTimer';
 import LoginScreen from './components/auth/LoginScreen';
 import Header from './components/layout/Header';
 import Dashboard from './components/dashboard/Dashboard';
+import ManagerDashboard from './components/dashboard/ManagerDashboard';
 import WorkTimer from './components/focus/WorkTimer';
 import FocusTaskCard from './components/focus/FocusTaskCard';
 import FilterBar from './components/tasks/FilterBar';
@@ -37,6 +38,7 @@ function App() {
   const [editingTask, setEditingTask] = useState(null);
   const [editingTaskDetails, setEditingTaskDetails] = useState(null);
   const [showDashboard, setShowDashboard] = useState(true);
+  const [showManagerDashboard, setShowManagerDashboard] = useState(false);
   const [showPriorityLimitModal, setShowPriorityLimitModal] = useState(false);
 
   // Priority Queue (max 7 tasks)
@@ -531,13 +533,15 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      <Header 
+      <Header
         user={auth.user}
         onLogout={auth.handleLogout}
         onRefresh={taskManager.fetchAllTasks}
         loading={taskManager.loading}
         showDashboard={showDashboard}
         onToggleDashboard={() => setShowDashboard(!showDashboard)}
+        showManagerDashboard={showManagerDashboard}
+        onToggleManagerDashboard={() => setShowManagerDashboard(!showManagerDashboard)}
       />
 
       <main className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -554,10 +558,21 @@ function App() {
         )}
 
         {showDashboard && (
-          <Dashboard 
+          <Dashboard
             dateRange={dateRange}
             setDateRange={setDateRange}
             metrics={dashboardMetrics}
+          />
+        )}
+
+        {showManagerDashboard && (
+          <ManagerDashboard
+            tasks={taskManager.tasks}
+            plans={taskManager.plans}
+            buckets={taskManager.buckets}
+            userProfiles={taskManager.userProfiles}
+            accessToken={auth.accessToken}
+            onEditTask={handleEditTask}
           />
         )}
 

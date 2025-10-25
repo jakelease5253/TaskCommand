@@ -69,10 +69,11 @@ A living document to track features, improvements, and changes we want to implem
 - [ ] **Checklist cannot complete items** checking the box does nothing
 - [ ] **Slack Phase 1** not yet calling PA flow (awaiting DEV URL + wiring)
 - [ ] **Manager/Admin pages** are stubs (no data yet)
-- [ ] **Browser refresh returns use to login screen**
-- [ ] **Priority Queue not persisting on browser refresh**
+- [x] **Browser refresh returns use to login screen**
+- [x] **Priority Queue not persisting on browser refresh**
 - [x] **Setting focus crashing app**
-- [ ] **Can't edit tasks from task list** button doesn't work
+- [x] **Can't edit tasks from task list** button doesn't work
+- [x] **Update fails when changing plan** Supplied bucket ID is invalid or does not exists
 
 ---
 
@@ -185,4 +186,4 @@ A living document to track features, improvements, and changes we want to implem
 
 ---
 
-**Last Updated:** 2025-10-23
+**Last Updated:** 2025-10-24

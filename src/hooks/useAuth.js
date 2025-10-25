@@ -73,6 +73,14 @@ export function useAuth() {
       const response = await fetch('https://graph.microsoft.com/v1.0/me', {
         headers: {'Authorization': `Bearer ${accessToken}`}
       });
+
+      // Check for unauthorized (expired token)
+      if (response.status === 401) {
+        console.log('Token expired, logging out...');
+        handleLogout();
+        return;
+      }
+
       const data = await response.json();
       setUser(data);
     } catch (err) {

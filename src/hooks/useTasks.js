@@ -10,7 +10,7 @@ export function useTasks(accessToken) {
 
   const fetchAllTasks = async () => {
     if (!accessToken) return;
-    
+
     setLoading(true);
     setError(null);
     try {
@@ -18,6 +18,15 @@ export function useTasks(accessToken) {
       const groupsResponse = await fetch('https://graph.microsoft.com/v1.0/me/planner/plans', {
         headers: {'Authorization': `Bearer ${accessToken}`}
       });
+
+      // Check for unauthorized (expired token)
+      if (groupsResponse.status === 401) {
+        console.log('Token expired, clearing authentication...');
+        localStorage.removeItem('taskcommand_access_token');
+        window.location.reload();
+        return;
+      }
+
       const groupsData = await groupsResponse.json();
       const plansMap = {};
       groupsData.value.forEach(plan => {

@@ -8,6 +8,7 @@ import LoginScreen from './components/auth/LoginScreen';
 import Header from './components/layout/Header';
 import Dashboard from './features/dashboards/personal/Dashboard';
 import ManagerDashboard from './features/dashboards/manager/ManagerDashboard';
+import Settings from './features/settings/Settings';
 import WorkTimer from './components/focus/WorkTimer';
 import FocusTaskCard from './components/focus/FocusTaskCard';
 import FilterBar from './components/tasks/FilterBar';
@@ -37,8 +38,8 @@ function App() {
   const [showNewTaskModal, setShowNewTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [editingTaskDetails, setEditingTaskDetails] = useState(null);
-  const [showDashboard, setShowDashboard] = useState(true);
-  const [showManagerDashboard, setShowManagerDashboard] = useState(false);
+  const [currentView, setCurrentView] = useState('personal'); // 'personal', 'manager', 'settings'
+  const [showMetrics, setShowMetrics] = useState(true); // For collapsible metrics on personal view
   const [showPriorityLimitModal, setShowPriorityLimitModal] = useState(false);
 
   // Priority Queue (max 7 tasks)
@@ -535,21 +536,11 @@ function App() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       <Header
         user={auth.user}
-        onLogout={auth.handleLogout}
+        currentView={currentView}
+        onNavigate={setCurrentView}
         onRefresh={taskManager.fetchAllTasks}
+        onLogout={auth.handleLogout}
         loading={taskManager.loading}
-        showDashboard={showDashboard}
-        onToggleDashboard={() => setShowDashboard(!showDashboard)}
-        showManagerDashboard={showManagerDashboard}
-        onToggleManagerDashboard={() => {
-          setShowManagerDashboard(!showManagerDashboard);
-          // Ensure only one view is shown at a time
-          if (!showManagerDashboard) {
-            setShowDashboard(false);
-          } else {
-            setShowDashboard(true);
-          }
-        }}
       />
 
       <main className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -565,28 +556,31 @@ function App() {
           </div>
         )}
 
-        {showDashboard && (
-          <Dashboard
-            dateRange={dateRange}
-            setDateRange={setDateRange}
-            metrics={dashboardMetrics}
-          />
-        )}
-
-        {showManagerDashboard && (
-          <ManagerDashboard
-            tasks={taskManager.tasks}
-            plans={taskManager.plans}
-            buckets={taskManager.buckets}
-            userProfiles={taskManager.userProfiles}
-            accessToken={auth.accessToken}
-            onEditTask={handleEditTask}
-          />
-        )}
-
-        {/* Personal View Components */}
-        {!showManagerDashboard && (
+        {/* Personal Tasks View */}
+        {currentView === 'personal' && (
           <>
+            {/* Collapsible Metrics Dashboard */}
+            {showMetrics ? (
+              <Dashboard
+                dateRange={dateRange}
+                setDateRange={setDateRange}
+                metrics={dashboardMetrics}
+                onToggleCollapse={() => setShowMetrics(false)}
+              />
+            ) : (
+              <div className="mb-8 flex justify-center">
+                <button
+                  onClick={() => setShowMetrics(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-sm font-medium text-slate-700"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                  Show Performance Metrics
+                </button>
+              </div>
+            )}
+
             <WorkTimer
               elapsed={workTimer.elapsed}
               isRunning={workTimer.isRunning}
@@ -666,6 +660,23 @@ function App() {
           </div>
         </div>
           </>
+        )}
+
+        {/* Manager Dashboard View */}
+        {currentView === 'manager' && (
+          <ManagerDashboard
+            tasks={taskManager.tasks}
+            plans={taskManager.plans}
+            buckets={taskManager.buckets}
+            userProfiles={taskManager.userProfiles}
+            accessToken={auth.accessToken}
+            onEditTask={handleEditTask}
+          />
+        )}
+
+        {/* Settings View */}
+        {currentView === 'settings' && (
+          <Settings />
         )}
       </main>
 

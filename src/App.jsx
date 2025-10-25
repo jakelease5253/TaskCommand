@@ -7,7 +7,7 @@ import { useTimer } from './hooks/useTimer';
 import LoginScreen from './components/auth/LoginScreen';
 import Header from './components/layout/Header';
 import Dashboard from './components/dashboard/Dashboard';
-import ManagerDashboard from './features/dashboards/manager/ManagerDashboard';
+import ManagerDashboard from './components/features/dashboards/manager/ManagerDashboard';
 import WorkTimer from './components/focus/WorkTimer';
 import FocusTaskCard from './components/focus/FocusTaskCard';
 import FilterBar from './components/tasks/FilterBar';

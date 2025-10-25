@@ -3,14 +3,13 @@ name: Deploy to Azure Static Web Apps
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: {}   # ← adds a "Run workflow" button in Actions
+  workflow_dispatch: {}
 
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -22,6 +21,7 @@ jobs:
           VITE_REDIRECT_URI: https://task.fieldworks.com
           VITE_GRAPH_SCOPES: Tasks.ReadWrite,Group.Read.All,User.Read
         run: |
+          echo "Using VITE_REDIRECT_URI=$VITE_REDIRECT_URI"
           npm ci
           npm run build
           echo "---- dist listing ----"

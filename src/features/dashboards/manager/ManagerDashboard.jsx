@@ -333,7 +333,7 @@ export default function ManagerDashboard({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {filteredTasks.slice(0, 10).map(task => (
+              {filteredTasks.map(task => (
                 <tr
                   key={task.id}
                   onClick={() => onEditTask && onEditTask(task)}
@@ -374,9 +374,9 @@ export default function ManagerDashboard({
               ))}
             </tbody>
           </table>
-          {filteredTasks.length > 10 && (
+          {filteredTasks.length > 100 && (
             <div className="p-4 text-center text-sm text-slate-600 bg-slate-50">
-              Showing 10 of {filteredTasks.length} tasks (full table with sorting/filtering coming next)
+              Showing all {filteredTasks.length} tasks (pagination coming in next phase for better performance)
             </div>
           )}
           {filteredTasks.length === 0 && (

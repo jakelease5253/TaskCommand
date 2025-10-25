@@ -26,4 +26,8 @@ dist-ssr
 # Environment variables
 .env.local
 .env.development
+<<<<<<< HEAD
 .env.*.local
+=======
+.env.*.local
+>>>>>>> origin/dev

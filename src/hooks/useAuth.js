@@ -16,6 +16,15 @@ export function useAuth() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // Check for stored token on mount
+  useEffect(() => {
+    const storedToken = localStorage.getItem('taskcommand_access_token');
+    if (storedToken) {
+      setAccessToken(storedToken);
+      setIsAuthenticated(true);
+    }
+  }, []);
+
   useEffect(() => {
     const hash = window.location.hash;
     if (hash && hash.includes('access_token')) {
@@ -41,8 +50,10 @@ export function useAuth() {
       const hash = window.location.hash.substring(1);
       const params = new URLSearchParams(hash);
       const token = params.get('access_token');
-      
+
       if (token) {
+        // Store token in localStorage for persistence across page refreshes
+        localStorage.setItem('taskcommand_access_token', token);
         setAccessToken(token);
         setIsAuthenticated(true);
         window.history.replaceState({}, document.title, window.location.pathname);
@@ -62,6 +73,14 @@ export function useAuth() {
       const response = await fetch('https://graph.microsoft.com/v1.0/me', {
         headers: {'Authorization': `Bearer ${accessToken}`}
       });
+
+      // Check for unauthorized (expired token)
+      if (response.status === 401) {
+        console.log('Token expired, logging out...');
+        handleLogout();
+        return;
+      }
+
       const data = await response.json();
       setUser(data);
     } catch (err) {
@@ -70,6 +89,8 @@ export function useAuth() {
   };
 
   const handleLogout = () => {
+    // Clear token from localStorage
+    localStorage.removeItem('taskcommand_access_token');
     setIsAuthenticated(false);
     setAccessToken(null);
     setUser(null);

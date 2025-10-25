@@ -6,7 +6,9 @@ import { useTimer } from './hooks/useTimer';
 // Component imports
 import LoginScreen from './components/auth/LoginScreen';
 import Header from './components/layout/Header';
-import Dashboard from './components/dashboard/Dashboard';
+import Dashboard from './features/dashboards/personal/Dashboard';
+import ManagerDashboard from './features/dashboards/manager/ManagerDashboard';
+import Settings from './features/settings/Settings';
 import WorkTimer from './components/focus/WorkTimer';
 import FocusTaskCard from './components/focus/FocusTaskCard';
 import FilterBar from './components/tasks/FilterBar';
@@ -36,7 +38,8 @@ function App() {
   const [showNewTaskModal, setShowNewTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [editingTaskDetails, setEditingTaskDetails] = useState(null);
-  const [showDashboard, setShowDashboard] = useState(true);
+  const [currentView, setCurrentView] = useState('personal'); // 'personal', 'manager', 'settings'
+  const [showMetrics, setShowMetrics] = useState(true); // For collapsible metrics on personal view
   const [showPriorityLimitModal, setShowPriorityLimitModal] = useState(false);
 
   // Priority Queue (max 7 tasks)
@@ -98,6 +101,8 @@ function App() {
   }, []);
 
   // Load priority queue from localStorage
+  const [priorityQueueLoaded, setPriorityQueueLoaded] = useState(false);
+
   useEffect(() => {
     const saved = localStorage.getItem('priorityQueue');
     if (saved) {
@@ -107,12 +112,68 @@ function App() {
         console.error('Error loading priority queue:', err);
       }
     }
+    // Mark as loaded even if there was nothing in storage
+    setPriorityQueueLoaded(true);
   }, []);
 
-  // Save priority queue to localStorage
+  // Save priority queue to localStorage (but not on initial render before load completes)
   useEffect(() => {
-    localStorage.setItem('priorityQueue', JSON.stringify(priorityQueue));
-  }, [priorityQueue]);
+    if (priorityQueueLoaded) {
+      localStorage.setItem('priorityQueue', JSON.stringify(priorityQueue));
+    }
+  }, [priorityQueue, priorityQueueLoaded]);
+
+  // Load focus task from localStorage
+  useEffect(() => {
+    const savedFocusTask = localStorage.getItem('focusTask');
+    const savedFocusTaskDetails = localStorage.getItem('focusTaskDetails');
+    const savedFocusTimerRunning = localStorage.getItem('focusTimerRunning');
+
+    if (savedFocusTask) {
+      try {
+        const task = JSON.parse(savedFocusTask);
+        setFocusTask(task);
+
+        // Restore task details if available
+        if (savedFocusTaskDetails) {
+          setFocusTaskDetails(JSON.parse(savedFocusTaskDetails));
+        }
+
+        // Restore the timer if there was saved focus time for this task
+        const savedTimes = localStorage.getItem('taskFocusTimes');
+        if (savedTimes) {
+          const times = JSON.parse(savedTimes);
+          if (times[task.id]) {
+            focusTimer.setElapsed(times[task.id]);
+            // Resume timer if it was running before refresh
+            if (savedFocusTimerRunning === 'true') {
+              focusTimer.setStartTime(Date.now() - (times[task.id] * 1000));
+              focusTimer.setIsRunning(true);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error loading focus task:', err);
+      }
+    }
+  }, []);
+
+  // Save focus task to localStorage whenever it changes
+  useEffect(() => {
+    if (focusTask) {
+      localStorage.setItem('focusTask', JSON.stringify(focusTask));
+      if (focusTaskDetails) {
+        localStorage.setItem('focusTaskDetails', JSON.stringify(focusTaskDetails));
+      }
+      // Save timer running state
+      localStorage.setItem('focusTimerRunning', focusTimer.isRunning.toString());
+    } else {
+      // Clear localStorage when focus task is cleared
+      localStorage.removeItem('focusTask');
+      localStorage.removeItem('focusTaskDetails');
+      localStorage.removeItem('focusTimerRunning');
+    }
+  }, [focusTask, focusTaskDetails, focusTimer.isRunning]);
 
   // Fetch user profile and tasks when authenticated
   useEffect(() => {
@@ -473,13 +534,13 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      <Header 
+      <Header
         user={auth.user}
-        onLogout={auth.handleLogout}
+        currentView={currentView}
+        onNavigate={setCurrentView}
         onRefresh={taskManager.fetchAllTasks}
+        onLogout={auth.handleLogout}
         loading={taskManager.loading}
-        showDashboard={showDashboard}
-        onToggleDashboard={() => setShowDashboard(!showDashboard)}
       />
 
       <main className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -495,35 +556,54 @@ function App() {
           </div>
         )}
 
-        {showDashboard && (
-          <Dashboard 
-            dateRange={dateRange}
-            setDateRange={setDateRange}
-            metrics={dashboardMetrics}
-          />
-        )}
+        {/* Personal Tasks View */}
+        {currentView === 'personal' && (
+          <>
+            {/* Collapsible Metrics Dashboard */}
+            {showMetrics ? (
+              <Dashboard
+                dateRange={dateRange}
+                setDateRange={setDateRange}
+                metrics={dashboardMetrics}
+                onToggleCollapse={() => setShowMetrics(false)}
+              />
+            ) : (
+              <div className="mb-8 flex justify-center">
+                <button
+                  onClick={() => setShowMetrics(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-sm font-medium text-slate-700"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                  Show Performance Metrics
+                </button>
+              </div>
+            )}
 
-        <WorkTimer 
-          elapsed={workTimer.elapsed}
-          isRunning={workTimer.isRunning}
-          onToggle={toggleWorkTimer}
-          onStop={stopWorkTimer}
-          formatTime={formatTime}
-        />
+            <WorkTimer
+              elapsed={workTimer.elapsed}
+              isRunning={workTimer.isRunning}
+              onToggle={toggleWorkTimer}
+              onStop={stopWorkTimer}
+              formatTime={formatTime}
+            />
 
-        {focusTask && (
-          <FocusTaskCard 
-            task={{...focusTask, description: focusTaskDetails?.description}}
-            elapsed={focusTimer.elapsed}
-            planName={taskManager.plans[focusTask.planId]}
-            bucketName={getBucketName(focusTask)}
-            onComplete={() => handleCompleteTask(focusTask.id)}
-            formatTime={formatTime}
-          />
-        )}
+            {focusTask && (
+              <FocusTaskCard
+                task={{...focusTask, description: focusTaskDetails?.description}}
+                elapsed={focusTimer.elapsed}
+                planName={taskManager.plans[focusTask.planId]}
+                bucketName={getBucketName(focusTask)}
+                onComplete={() => handleCompleteTask(focusTask.id)}
+                onEdit={handleEditTask}
+                onUnfocus={handleSetFocusTask}
+                formatTime={formatTime}
+              />
+            )}
 
-        {/* Two-Column Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Two-Column Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - All Tasks (2/3 width) */}
           <div className="lg:col-span-2 space-y-4">
             <FilterBar 
@@ -579,6 +659,25 @@ function App() {
             />
           </div>
         </div>
+          </>
+        )}
+
+        {/* Manager Dashboard View */}
+        {currentView === 'manager' && (
+          <ManagerDashboard
+            tasks={taskManager.tasks}
+            plans={taskManager.plans}
+            buckets={taskManager.buckets}
+            userProfiles={taskManager.userProfiles}
+            accessToken={auth.accessToken}
+            onEditTask={handleEditTask}
+          />
+        )}
+
+        {/* Settings View */}
+        {currentView === 'settings' && (
+          <Settings />
+        )}
       </main>
 
       {showNewTaskModal && (
@@ -605,10 +704,22 @@ function App() {
             setEditingTask(null);
             setEditingTaskDetails(null);
           }}
-          onTaskUpdated={() => {
+          onTaskUpdated={async () => {
+            const wasEditingFocusedTask = focusTask && editingTask.id === focusTask.id;
             setEditingTask(null);
             setEditingTaskDetails(null);
-            taskManager.fetchAllTasks();
+            await taskManager.fetchAllTasks();
+
+            // If we edited the focused task, refresh it with updated data
+            if (wasEditingFocusedTask) {
+              const updatedTask = taskManager.tasks.find(t => t.id === focusTask.id);
+              if (updatedTask) {
+                setFocusTask(updatedTask);
+                // Also refresh task details
+                const details = await taskManager.fetchTaskDetails(updatedTask.id);
+                setFocusTaskDetails(details);
+              }
+            }
           }}
         />
       )}

@@ -136,5 +136,3 @@ app.http('CompleteTask', {
     }
   }
 });
-
-module.exports = { CompleteTask };

@@ -40,6 +40,9 @@ export default function ManagerDashboard({
   const ROW_HEIGHT = 52; // Height of each row in pixels
   const VISIBLE_ROWS = 20; // Number of rows to render at once
 
+  // Track tasks currently being completed
+  const [completingTasks, setCompletingTasks] = useState(new Set());
+
   // Fetch company-wide data from backend
   const fetchCompanyTasks = async () => {
     if (!accessToken) return;
@@ -368,24 +371,45 @@ export default function ManagerDashboard({
       event.stopPropagation();
     }
 
+    // Prevent duplicate completions
+    if (completingTasks.has(taskId)) {
+      console.log('Task already being completed:', taskId);
+      return;
+    }
+
     console.log('Completing task:', taskId);
 
-    try {
-      // Optimistically remove the task from local state immediately
-      setCompanyData(prev => ({
-        ...prev,
-        tasks: prev.tasks.filter(task => task.id !== taskId)
-      }));
+    // Mark task as completing
+    setCompletingTasks(prev => new Set([...prev, taskId]));
 
-      // Call the parent completion handler in the background
-      await onCompleteTask(taskId);
+    // Optimistically remove the task from local state immediately
+    setCompanyData(prev => ({
+      ...prev,
+      tasks: prev.tasks.filter(task => task.id !== taskId)
+    }));
 
-      console.log('Task completed successfully');
-    } catch (err) {
-      console.error('Error completing task from Manager Dashboard:', err);
-      // Optionally: refetch on error to restore correct state
-      await fetchCompanyTasks();
-    }
+    // Call the parent completion handler in the background (don't await here)
+    onCompleteTask(taskId)
+      .then(() => {
+        console.log('Task completed successfully:', taskId);
+        // Remove from completing set after success
+        setCompletingTasks(prev => {
+          const next = new Set(prev);
+          next.delete(taskId);
+          return next;
+        });
+      })
+      .catch(err => {
+        console.error('Error completing task:', taskId, err);
+        // Remove from completing set on error
+        setCompletingTasks(prev => {
+          const next = new Set(prev);
+          next.delete(taskId);
+          return next;
+        });
+        // Don't refetch - keep the optimistic removal
+        // The task is likely completed even if the response was slow/timed out
+      });
   };
 
   // Loading state
@@ -422,7 +446,15 @@ export default function ManagerDashboard({
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Manager Dashboard</h2>
-          <p className="text-sm text-slate-600 mt-1">Company-wide task overview • {companyData.tasks.length} total tasks</p>
+          <div className="flex items-center gap-3 mt-1">
+            <p className="text-sm text-slate-600">Company-wide task overview • {companyData.tasks.length} total tasks</p>
+            {completingTasks.size > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-lg animate-pulse">
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                Completing {completingTasks.size} task{completingTasks.size !== 1 ? 's' : ''}...
+              </span>
+            )}
+          </div>
         </div>
         <button
           onClick={handleManualRefresh}

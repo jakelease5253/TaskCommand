@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { AlertCircle, Users, Calendar, Target, TrendingUp, Archive, Search, X, ChevronUp, ChevronDown } from "../../../components/ui/icons";
+import { AlertCircle, Users, Calendar, Target, TrendingUp, Archive, Search, X, ChevronUp, ChevronDown, RefreshCw } from "../../../components/ui/icons";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:7071';
 
@@ -10,6 +10,7 @@ export default function ManagerDashboard({
 }) {
   // Backend data state
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [companyData, setCompanyData] = useState({
     tasks: [],
@@ -81,6 +82,33 @@ export default function ManagerDashboard({
   useEffect(() => {
     fetchCompanyTasks();
   }, [accessToken]);
+
+  // Manual refresh without full loading state
+  const handleManualRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/tasks/company`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setCompanyData({
+          tasks: result.data.tasks || [],
+          plans: result.data.plans || {},
+          buckets: result.data.buckets || {},
+          userProfiles: result.data.userProfiles || {}
+        });
+      }
+    } catch (err) {
+      console.error('Error refreshing data:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // Get all incomplete tasks for metrics and display
   const incompleteTasks = useMemo(() => {
@@ -333,21 +361,30 @@ export default function ManagerDashboard({
                           selectedPlans.length > 0 || selectedStatuses.length > 0 ||
                           dateRange !== 'all' || customStartDate || customEndDate;
 
-  // Handle task completion
+  // Handle task completion with optimistic updates
   const handleCompleteTask = async (taskId, event) => {
     // Prevent row click from firing
     if (event) {
       event.stopPropagation();
     }
 
+    console.log('Completing task:', taskId);
+
     try {
-      // Call the parent completion handler
+      // Optimistically remove the task from local state immediately
+      setCompanyData(prev => ({
+        ...prev,
+        tasks: prev.tasks.filter(task => task.id !== taskId)
+      }));
+
+      // Call the parent completion handler in the background
       await onCompleteTask(taskId);
 
-      // Refetch company data to update the dashboard
-      await fetchCompanyTasks();
+      console.log('Task completed successfully');
     } catch (err) {
       console.error('Error completing task from Manager Dashboard:', err);
+      // Optionally: refetch on error to restore correct state
+      await fetchCompanyTasks();
     }
   };
 
@@ -382,9 +419,22 @@ export default function ManagerDashboard({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-slate-800">Manager Dashboard</h2>
-        <p className="text-sm text-slate-600 mt-1">Company-wide task overview • {companyData.tasks.length} total tasks</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">Manager Dashboard</h2>
+          <p className="text-sm text-slate-600 mt-1">Company-wide task overview • {companyData.tasks.length} total tasks</p>
+        </div>
+        <button
+          onClick={handleManualRefresh}
+          disabled={refreshing}
+          className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Refresh data"
+        >
+          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          <span className="text-sm font-medium text-slate-700">
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </span>
+        </button>
       </div>
 
       {/* Metrics Cards */}

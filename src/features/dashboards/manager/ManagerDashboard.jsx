@@ -6,7 +6,6 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:7071';
 export default function ManagerDashboard({
   accessToken,
   onEditTask,
-  onCompleteTask,
 }) {
   // Backend data state
   const [loading, setLoading] = useState(true);
@@ -388,8 +387,22 @@ export default function ManagerDashboard({
       tasks: prev.tasks.filter(task => task.id !== taskId)
     }));
 
-    // Call the parent completion handler in the background (don't await here)
-    onCompleteTask(taskId)
+    // Call backend endpoint to complete task with application permissions
+    fetch(`${BACKEND_URL}/api/tasks/${taskId}/complete`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(err => {
+            throw new Error(err.message || err.error || 'Failed to complete task');
+          });
+        }
+        return response.json();
+      })
       .then(() => {
         console.log('Task completed successfully:', taskId);
         // Remove from completing set after success
@@ -400,15 +413,17 @@ export default function ManagerDashboard({
         });
       })
       .catch(err => {
-        console.error('Error completing task:', taskId, err);
+        console.error('Error completing task:', taskId, err.message);
         // Remove from completing set on error
         setCompletingTasks(prev => {
           const next = new Set(prev);
           next.delete(taskId);
           return next;
         });
-        // Don't refetch - keep the optimistic removal
-        // The task is likely completed even if the response was slow/timed out
+        // On error, restore the task (it wasn't completed)
+        setError(`Failed to complete task: ${err.message}`);
+        // Refetch to restore correct state
+        fetchCompanyTasks();
       });
   };
 

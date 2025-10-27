@@ -667,7 +667,6 @@ function App() {
           <ManagerDashboard
             accessToken={auth.accessToken}
             onEditTask={handleEditTask}
-            onCompleteTask={handleCompleteTask}
           />
         )}
 

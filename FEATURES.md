@@ -30,15 +30,6 @@ A living document to track features, improvements, and changes we want to implem
 ## 🔮 Future Enhancements
 
 ### Core Functionality
-- [ ] **Search tasks**
-  - Global search functionality to quickly find tasks across all plans
-  - Search by title, description, tags, assignee
-  - Filter by plan, bucket, priority, due date
-
-- [ ] **Cross-plan task view**
-  - "Show me ALL my tasks" across every plan
-  - Unified view regardless of which Planner board tasks are on
-
 - [ ] **Task dependencies**
   - Mark tasks that can't start until another is complete
   - Visual indicators for blocked tasks
@@ -50,10 +41,6 @@ A living document to track features, improvements, and changes we want to implem
 - [ ] **Task templates**
   - Pre-built checklists for common workflows
   - Quick-start templates for standard processes
-
-- [ ] **Bulk actions**
-  - Select multiple tasks to update priority, reassign, delete
-  - Batch operations for efficiency
 
 - [ ] **Display all task details on hover**
   - Quick preview tooltip with task information
@@ -139,11 +126,6 @@ A living document to track features, improvements, and changes we want to implem
   - Visual progress indicators
 
 ### Manager Interface 🔥 (Key Differentiator)
-- [ ] **View direct reports' tasks**
-  - See team member task lists
-  - Monitor progress and workload
-  - Filter by person, plan, or priority
-
 - [ ] **Set priorities for team members**
   - Assign priority levels that sync to individual user views
   - Override or suggest priority changes
@@ -164,11 +146,6 @@ A living document to track features, improvements, and changes we want to implem
   - Is the team taking on too much?
   - Project timeline forecasting
   - Resource allocation insights
-
-- [ ] **Cross-team visibility**
-  - See tasks across multiple teams/departments
-  - Department-level filtering
-  - Organization-wide views
 
 ### Settings & Configuration
 - [ ] **Settings Page**
@@ -221,6 +198,63 @@ A living document to track features, improvements, and changes we want to implem
 - [x] Work timer functionality
 - [x] Dashboard with task overview
 
+#### Manager Dashboard (2025-10-27)
+- [x] **Company-wide task viewing**
+  - View all tasks across the organization (not just personal tasks)
+  - Cross-plan task view showing tasks from all Planner boards
+  - Organization-wide visibility into team activities
+
+- [x] **Backend API with Application Permissions**
+  - Azure Functions backend deployed
+  - Application-level Microsoft Graph API access
+  - Authentication and authorization middleware
+  - Manager role verification for secure access
+  - Endpoints: GET /api/tasks/company, POST /api/tasks/{taskId}/complete
+
+- [x] **Advanced Search and Filtering**
+  - Global search across task names, plans, and buckets
+  - Filter by assignee (all team members)
+  - Filter by plan (all company plans)
+  - Filter by status (not-started, in-progress)
+  - Filter by date ranges:
+    - All tasks
+    - Overdue
+    - This week
+    - This month
+    - Backlog (no due date)
+    - Custom date range picker
+  - Filter chips with one-click removal
+  - Real-time filtering as you type
+
+- [x] **Sortable Columns**
+  - Sort by task name, assignee, plan, status, due date, priority
+  - Visual indicators (up/down arrows) for sort direction
+  - Persistent sort state during filtering
+
+- [x] **Task Completion from Manager Dashboard**
+  - Checkbox column for marking tasks complete
+  - Bulk completion support (select multiple tasks)
+  - Uses backend application permissions to complete any user's tasks
+  - Optimistic UI updates (tasks disappear immediately)
+  - Progress indicator showing "Completing X tasks..."
+  - Graceful error handling with automatic rollback
+  - Parallel processing for multiple completions
+
+- [x] **Performance Optimizations**
+  - Virtual scrolling for 400+ tasks
+  - Renders only 20 visible rows at a time
+  - Smooth scrolling without lag
+  - Fixed column widths for consistent layout
+  - Minimal re-renders with React.memo and useMemo
+
+- [x] **UI/UX Improvements**
+  - Fixed table column spacing and alignment
+  - Proper assignee display with user profiles
+  - Responsive layout with fixed table structure
+  - Loading states and error handling
+  - Refresh button with independent loading state
+  - Clean, modern interface matching app design system
+
 ---
 
 ## 📝 Notes
@@ -247,4 +281,4 @@ A living document to track features, improvements, and changes we want to implem
 
 ---
 
-**Last Updated:** 2025-10-20
+**Last Updated:** 2025-10-27

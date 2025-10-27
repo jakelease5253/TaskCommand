@@ -6,6 +6,7 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:7071';
 export default function ManagerDashboard({
   accessToken,
   onEditTask,
+  onCompleteTask,
 }) {
   // Backend data state
   const [loading, setLoading] = useState(true);
@@ -39,45 +40,45 @@ export default function ManagerDashboard({
   const VISIBLE_ROWS = 20; // Number of rows to render at once
 
   // Fetch company-wide data from backend
-  useEffect(() => {
-    const fetchCompanyTasks = async () => {
-      if (!accessToken) return;
+  const fetchCompanyTasks = async () => {
+    if (!accessToken) return;
 
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
 
-      try {
-        console.log('Fetching company-wide tasks from backend...');
-        const response = await fetch(`${BACKEND_URL}/api/tasks/company`, {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+    try {
+      console.log('Fetching company-wide tasks from backend...');
+      const response = await fetch(`${BACKEND_URL}/api/tasks/company`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
         }
+      });
 
-        const result = await response.json();
-        console.log('Company tasks received:', result);
-
-        setCompanyData({
-          tasks: result.data.tasks || [],
-          plans: result.data.plans || {},
-          buckets: result.data.buckets || {},
-          userProfiles: result.data.userProfiles || {}
-        });
-
-      } catch (err) {
-        console.error('Error fetching company tasks:', err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
       }
-    };
 
+      const result = await response.json();
+      console.log('Company tasks received:', result);
+
+      setCompanyData({
+        tasks: result.data.tasks || [],
+        plans: result.data.plans || {},
+        buckets: result.data.buckets || {},
+        userProfiles: result.data.userProfiles || {}
+      });
+
+    } catch (err) {
+      console.error('Error fetching company tasks:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchCompanyTasks();
   }, [accessToken]);
 
@@ -331,6 +332,24 @@ export default function ManagerDashboard({
   const hasActiveFilters = searchQuery || selectedAssignees.length > 0 ||
                           selectedPlans.length > 0 || selectedStatuses.length > 0 ||
                           dateRange !== 'all' || customStartDate || customEndDate;
+
+  // Handle task completion
+  const handleCompleteTask = async (taskId, event) => {
+    // Prevent row click from firing
+    if (event) {
+      event.stopPropagation();
+    }
+
+    try {
+      // Call the parent completion handler
+      await onCompleteTask(taskId);
+
+      // Refetch company data to update the dashboard
+      await fetchCompanyTasks();
+    } catch (err) {
+      console.error('Error completing task from Manager Dashboard:', err);
+    }
+  };
 
   // Loading state
   if (loading) {
@@ -629,15 +648,19 @@ export default function ManagerDashboard({
         >
           <table className="w-full table-fixed">
             <colgroup>
-              <col style={{ width: '30%' }} />
-              <col style={{ width: '15%' }} />
-              <col style={{ width: '20%' }} />
+              <col style={{ width: '5%' }} />
+              <col style={{ width: '28%' }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '18%' }} />
               <col style={{ width: '12%' }} />
               <col style={{ width: '13%' }} />
               <col style={{ width: '10%' }} />
             </colgroup>
             <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
               <tr>
+                <th className="px-4 py-3 text-center text-xs font-medium text-slate-600 uppercase">
+                  Done
+                </th>
                 <th
                   onClick={() => handleSort('taskName')}
                   className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase cursor-pointer hover:bg-slate-100 transition-colors"
@@ -716,6 +739,15 @@ export default function ManagerDashboard({
                     height: `${ROW_HEIGHT}px`,
                   }}
                 >
+                  <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={false}
+                      onChange={(e) => handleCompleteTask(task.id, e)}
+                      className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
+                      title="Mark as complete"
+                    />
+                  </td>
                   <td className="px-4 py-3 text-sm text-slate-800 truncate">{task.title}</td>
                   <td className="px-4 py-3 text-sm text-slate-600 truncate">
                     {task.assignments ? Object.keys(task.assignments).map(userId =>

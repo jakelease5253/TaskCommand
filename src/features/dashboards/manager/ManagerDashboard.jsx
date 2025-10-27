@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from "react";
-import { AlertCircle, Users, Calendar, Target, TrendingUp, Archive } from "../../../components/ui/icons";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import { AlertCircle, Users, Calendar, Target, TrendingUp, Archive, Search, X, ChevronUp, ChevronDown } from "../../../components/ui/icons";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:7071';
 
@@ -17,16 +17,24 @@ export default function ManagerDashboard({
     userProfiles: {}
   });
 
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+
   // Filter state
   const [selectedAssignees, setSelectedAssignees] = useState([]);
   const [selectedPlans, setSelectedPlans] = useState([]);
   const [selectedStatuses, setSelectedStatuses] = useState([]);
-  const [dateRange, setDateRange] = useState('all'); // all, thisWeek, thisMonth, custom
+  const [dateRange, setDateRange] = useState('all'); // all, overdue, thisWeek, thisMonth, backlog
 
   // Table state
-  const [columnOrder, setColumnOrder] = useState(['taskName', 'assignee', 'plan', 'status', 'dueDate', 'priority']);
   const [sortBy, setSortBy] = useState('dueDate');
   const [sortDirection, setSortDirection] = useState('asc');
+
+  // Virtual scrolling state
+  const [scrollTop, setScrollTop] = useState(0);
+  const tableContainerRef = useRef(null);
+  const ROW_HEIGHT = 52; // Height of each row in pixels
+  const VISIBLE_ROWS = 20; // Number of rows to render at once
 
   // Fetch company-wide data from backend
   useEffect(() => {
@@ -121,9 +129,35 @@ export default function ManagerDashboard({
     };
   }, [incompleteTasks]);
 
-  // Apply filters to tasks
-  const filteredTasks = useMemo(() => {
+  // Get unique assignees and plans for filter dropdowns
+  const uniqueAssignees = useMemo(() => {
+    const assigneeSet = new Set();
+    incompleteTasks.forEach(task => {
+      if (task.assignments) {
+        Object.keys(task.assignments).forEach(userId => assigneeSet.add(userId));
+      }
+    });
+    return Array.from(assigneeSet);
+  }, [incompleteTasks]);
+
+  const uniquePlans = useMemo(() => {
+    return Object.keys(companyData.plans);
+  }, [companyData.plans]);
+
+  // Apply filters, search, and sorting to tasks
+  const filteredAndSortedTasks = useMemo(() => {
     let filtered = [...incompleteTasks];
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(task => {
+        const titleMatch = task.title?.toLowerCase().includes(query);
+        const planMatch = companyData.plans[task.planId]?.toLowerCase().includes(query);
+        const bucketMatch = companyData.buckets[task.planId]?.find(b => b.id === task.bucketId)?.name?.toLowerCase().includes(query);
+        return titleMatch || planMatch || bucketMatch;
+      });
+    }
 
     // Filter by assignees
     if (selectedAssignees.length > 0) {
@@ -147,22 +181,85 @@ export default function ManagerDashboard({
     }
 
     // Filter by date range
-    if (dateRange === 'thisWeek') {
-      const now = new Date();
-      now.setHours(0, 0, 0, 0);
-      const weekFromNow = new Date(now);
-      weekFromNow.setDate(weekFromNow.getDate() + 7);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
 
+    if (dateRange !== 'all') {
       filtered = filtered.filter(task => {
+        if (dateRange === 'backlog') {
+          return !task.dueDateTime;
+        }
+
         if (!task.dueDateTime) return false;
+
         const dueDate = new Date(task.dueDateTime);
         dueDate.setHours(0, 0, 0, 0);
-        return dueDate >= now && dueDate <= weekFromNow;
+
+        if (dateRange === 'overdue') {
+          return dueDate < now;
+        } else if (dateRange === 'thisWeek') {
+          const weekFromNow = new Date(now);
+          weekFromNow.setDate(weekFromNow.getDate() + 7);
+          return dueDate >= now && dueDate <= weekFromNow;
+        } else if (dateRange === 'thisMonth') {
+          const monthFromNow = new Date(now);
+          monthFromNow.setMonth(monthFromNow.getMonth() + 1);
+          return dueDate >= now && dueDate <= monthFromNow;
+        }
+        return true;
       });
     }
 
+    // Apply sorting
+    filtered.sort((a, b) => {
+      let aVal, bVal;
+
+      switch (sortBy) {
+        case 'taskName':
+          aVal = a.title?.toLowerCase() || '';
+          bVal = b.title?.toLowerCase() || '';
+          break;
+        case 'assignee':
+          aVal = a.assignments ? Object.keys(a.assignments)[0] || '' : '';
+          bVal = b.assignments ? Object.keys(b.assignments)[0] || '' : '';
+          break;
+        case 'plan':
+          aVal = companyData.plans[a.planId] || '';
+          bVal = companyData.plans[b.planId] || '';
+          break;
+        case 'status':
+          aVal = getTaskStatus(a);
+          bVal = getTaskStatus(b);
+          break;
+        case 'dueDate':
+          aVal = a.dueDateTime ? new Date(a.dueDateTime).getTime() : Infinity;
+          bVal = b.dueDateTime ? new Date(b.dueDateTime).getTime() : Infinity;
+          break;
+        case 'priority':
+          aVal = a.priority || 5;
+          bVal = b.priority || 5;
+          break;
+        default:
+          return 0;
+      }
+
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
     return filtered;
-  }, [incompleteTasks, selectedAssignees, selectedPlans, selectedStatuses, dateRange]);
+  }, [incompleteTasks, searchQuery, selectedAssignees, selectedPlans, selectedStatuses, dateRange, sortBy, sortDirection, companyData]);
+
+  // Virtual scrolling: Calculate which tasks to render
+  const visibleTasks = useMemo(() => {
+    const startIndex = Math.floor(scrollTop / ROW_HEIGHT);
+    const endIndex = Math.min(startIndex + VISIBLE_ROWS, filteredAndSortedTasks.length);
+    return filteredAndSortedTasks.slice(startIndex, endIndex).map((task, idx) => ({
+      task,
+      index: startIndex + idx
+    }));
+  }, [filteredAndSortedTasks, scrollTop]);
 
   // Helper functions
   const getTaskStatus = (task) => {
@@ -181,6 +278,47 @@ export default function ManagerDashboard({
     const date = new Date(dateString);
     return date.toLocaleDateString();
   };
+
+  const handleSort = (column) => {
+    if (sortBy === column) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const clearAllFilters = () => {
+    setSearchQuery('');
+    setSelectedAssignees([]);
+    setSelectedPlans([]);
+    setSelectedStatuses([]);
+    setDateRange('all');
+  };
+
+  const toggleFilter = (filterType, value) => {
+    switch (filterType) {
+      case 'assignee':
+        setSelectedAssignees(prev =>
+          prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+        );
+        break;
+      case 'plan':
+        setSelectedPlans(prev =>
+          prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+        );
+        break;
+      case 'status':
+        setSelectedStatuses(prev =>
+          prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+        );
+        break;
+    }
+  };
+
+  const hasActiveFilters = searchQuery || selectedAssignees.length > 0 ||
+                          selectedPlans.length > 0 || selectedStatuses.length > 0 ||
+                          dateRange !== 'all';
 
   // Loading state
   if (loading) {
@@ -305,39 +443,221 @@ export default function ManagerDashboard({
         </div>
       </div>
 
-      {/* Filters - Placeholder for now */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-        <h3 className="text-sm font-semibold text-slate-800 mb-3">Filters</h3>
-        <div className="text-sm text-slate-600">
-          Filters coming in next phase...
+      {/* Search and Filters */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-4">
+        {/* Search Bar */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="Search tasks by name, plan, or bucket..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-10 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          {hasActiveFilters && (
+            <button
+              onClick={clearAllFilters}
+              className="px-4 py-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
+            >
+              Clear All
+            </button>
+          )}
         </div>
+
+        {/* Filter Chips */}
+        <div className="flex flex-wrap gap-3">
+          {/* Date Range Filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-slate-600">Date:</span>
+            <select
+              value={dateRange}
+              onChange={(e) => setDateRange(e.target.value)}
+              className="text-sm px-3 py-1 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="all">All</option>
+              <option value="overdue">Overdue</option>
+              <option value="thisWeek">This Week</option>
+              <option value="thisMonth">This Month</option>
+              <option value="backlog">Backlog</option>
+            </select>
+          </div>
+
+          {/* Status Filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-slate-600">Status:</span>
+            <div className="flex gap-1">
+              {['not-started', 'in-progress'].map(status => (
+                <button
+                  key={status}
+                  onClick={() => toggleFilter('status', status)}
+                  className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
+                    selectedStatuses.includes(status)
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  {status.replace('-', ' ')}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Plan Filter - Show first 3 plans + "More" dropdown if > 3 */}
+          {uniquePlans.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-slate-600">Plans:</span>
+              <select
+                value=""
+                onChange={(e) => e.target.value && toggleFilter('plan', e.target.value)}
+                className="text-sm px-3 py-1 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">Select plan...</option>
+                {uniquePlans.map(planId => (
+                  <option key={planId} value={planId}>
+                    {companyData.plans[planId]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        {/* Active Filter Tags */}
+        {(selectedPlans.length > 0 || selectedAssignees.length > 0) && (
+          <div className="flex flex-wrap gap-2">
+            {selectedPlans.map(planId => (
+              <span key={planId} className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-700 text-xs font-medium rounded-lg">
+                {companyData.plans[planId]}
+                <button onClick={() => toggleFilter('plan', planId)} className="hover:text-indigo-900">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+            {selectedAssignees.map(userId => (
+              <span key={userId} className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-700 text-xs font-medium rounded-lg">
+                {companyData.userProfiles[userId]}
+                <button onClick={() => toggleFilter('assignee', userId)} className="hover:text-indigo-900">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Table - Placeholder for now */}
+      {/* Task Table with Virtual Scrolling */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-4">
+        <div className="p-4 flex items-center justify-between border-b border-slate-200">
           <h3 className="text-sm font-semibold text-slate-800">
-            Tasks ({filteredTasks.length})
+            Tasks ({filteredAndSortedTasks.length} {hasActiveFilters && `of ${incompleteTasks.length}`})
           </h3>
+          <span className="text-xs text-slate-500">Click column headers to sort</span>
         </div>
-        <div className="overflow-x-auto">
+
+        <div
+          ref={tableContainerRef}
+          className="overflow-auto"
+          style={{ maxHeight: '600px' }}
+          onScroll={(e) => setScrollTop(e.target.scrollTop)}
+        >
           <table className="w-full">
-            <thead className="bg-slate-50 border-y border-slate-200">
+            <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase">Task Name</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase">Assignee</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase">Plan</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase">Due Date</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase">Priority</th>
+                <th
+                  onClick={() => handleSort('taskName')}
+                  className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase cursor-pointer hover:bg-slate-100 transition-colors"
+                >
+                  <div className="flex items-center gap-1">
+                    Task Name
+                    {sortBy === 'taskName' && (
+                      sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('assignee')}
+                  className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase cursor-pointer hover:bg-slate-100 transition-colors"
+                >
+                  <div className="flex items-center gap-1">
+                    Assignee
+                    {sortBy === 'assignee' && (
+                      sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('plan')}
+                  className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase cursor-pointer hover:bg-slate-100 transition-colors"
+                >
+                  <div className="flex items-center gap-1">
+                    Plan
+                    {sortBy === 'plan' && (
+                      sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('status')}
+                  className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase cursor-pointer hover:bg-slate-100 transition-colors"
+                >
+                  <div className="flex items-center gap-1">
+                    Status
+                    {sortBy === 'status' && (
+                      sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('dueDate')}
+                  className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase cursor-pointer hover:bg-slate-100 transition-colors"
+                >
+                  <div className="flex items-center gap-1">
+                    Due Date
+                    {sortBy === 'dueDate' && (
+                      sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('priority')}
+                  className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase cursor-pointer hover:bg-slate-100 transition-colors"
+                >
+                  <div className="flex items-center gap-1">
+                    Priority
+                    {sortBy === 'priority' && (
+                      sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                    )}
+                  </div>
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
-              {filteredTasks.map(task => (
+            <tbody
+              className="divide-y divide-slate-200"
+              style={{
+                height: `${filteredAndSortedTasks.length * ROW_HEIGHT}px`,
+                position: 'relative'
+              }}
+            >
+              {visibleTasks.map(({ task, index }) => (
                 <tr
                   key={task.id}
                   onClick={() => onEditTask && onEditTask(task)}
-                  className="hover:bg-slate-50 cursor-pointer transition-colors"
+                  className="hover:bg-slate-50 cursor-pointer transition-colors absolute w-full"
+                  style={{
+                    height: `${ROW_HEIGHT}px`,
+                    top: `${index * ROW_HEIGHT}px`,
+                  }}
                 >
                   <td className="px-4 py-3 text-sm text-slate-800">{task.title}</td>
                   <td className="px-4 py-3 text-sm text-slate-600">
@@ -374,12 +694,7 @@ export default function ManagerDashboard({
               ))}
             </tbody>
           </table>
-          {filteredTasks.length > 100 && (
-            <div className="p-4 text-center text-sm text-slate-600 bg-slate-50">
-              Showing all {filteredTasks.length} tasks (pagination coming in next phase for better performance)
-            </div>
-          )}
-          {filteredTasks.length === 0 && (
+          {filteredAndSortedTasks.length === 0 && (
             <div className="p-8 text-center text-slate-600">
               No tasks found matching filters
             </div>

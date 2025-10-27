@@ -24,7 +24,9 @@ export default function ManagerDashboard({
   const [selectedAssignees, setSelectedAssignees] = useState([]);
   const [selectedPlans, setSelectedPlans] = useState([]);
   const [selectedStatuses, setSelectedStatuses] = useState([]);
-  const [dateRange, setDateRange] = useState('all'); // all, overdue, thisWeek, thisMonth, backlog
+  const [dateRange, setDateRange] = useState('all'); // all, overdue, thisWeek, thisMonth, backlog, custom
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
 
   // Table state
   const [sortBy, setSortBy] = useState('dueDate');
@@ -205,6 +207,14 @@ export default function ManagerDashboard({
           const monthFromNow = new Date(now);
           monthFromNow.setMonth(monthFromNow.getMonth() + 1);
           return dueDate >= now && dueDate <= monthFromNow;
+        } else if (dateRange === 'custom') {
+          if (customStartDate && customEndDate) {
+            const startDate = new Date(customStartDate);
+            startDate.setHours(0, 0, 0, 0);
+            const endDate = new Date(customEndDate);
+            endDate.setHours(23, 59, 59, 999);
+            return dueDate >= startDate && dueDate <= endDate;
+          }
         }
         return true;
       });
@@ -294,6 +304,8 @@ export default function ManagerDashboard({
     setSelectedPlans([]);
     setSelectedStatuses([]);
     setDateRange('all');
+    setCustomStartDate('');
+    setCustomEndDate('');
   };
 
   const toggleFilter = (filterType, value) => {
@@ -318,7 +330,7 @@ export default function ManagerDashboard({
 
   const hasActiveFilters = searchQuery || selectedAssignees.length > 0 ||
                           selectedPlans.length > 0 || selectedStatuses.length > 0 ||
-                          dateRange !== 'all';
+                          dateRange !== 'all' || customStartDate || customEndDate;
 
   // Loading state
   if (loading) {
@@ -490,8 +502,33 @@ export default function ManagerDashboard({
               <option value="thisWeek">This Week</option>
               <option value="thisMonth">This Month</option>
               <option value="backlog">Backlog</option>
+              <option value="custom">Custom Range</option>
             </select>
           </div>
+
+          {/* Custom Date Range Pickers */}
+          {dateRange === 'custom' && (
+            <>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-slate-600">From:</span>
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="text-sm px-3 py-1 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-slate-600">To:</span>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="text-sm px-3 py-1 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </>
+          )}
 
           {/* Status Filter */}
           <div className="flex items-center gap-2">
@@ -513,10 +550,29 @@ export default function ManagerDashboard({
             </div>
           </div>
 
-          {/* Plan Filter - Show first 3 plans + "More" dropdown if > 3 */}
+          {/* Assignee Filter */}
+          {uniqueAssignees.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-slate-600">Assignee:</span>
+              <select
+                value=""
+                onChange={(e) => e.target.value && toggleFilter('assignee', e.target.value)}
+                className="text-sm px-3 py-1 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">Select assignee...</option>
+                {uniqueAssignees.map(userId => (
+                  <option key={userId} value={userId}>
+                    {companyData.userProfiles[userId] || 'User'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Plan Filter */}
           {uniquePlans.length > 0 && (
             <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-slate-600">Plans:</span>
+              <span className="text-xs font-medium text-slate-600">Plan:</span>
               <select
                 value=""
                 onChange={(e) => e.target.value && toggleFilter('plan', e.target.value)}
@@ -571,7 +627,15 @@ export default function ManagerDashboard({
           style={{ maxHeight: '600px' }}
           onScroll={(e) => setScrollTop(e.target.scrollTop)}
         >
-          <table className="w-full">
+          <table className="w-full table-fixed">
+            <colgroup>
+              <col style={{ width: '30%' }} />
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '20%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '13%' }} />
+              <col style={{ width: '10%' }} />
+            </colgroup>
             <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
               <tr>
                 <th
@@ -642,34 +706,27 @@ export default function ManagerDashboard({
                 </th>
               </tr>
             </thead>
-            <tbody
-              className="divide-y divide-slate-200"
-              style={{
-                height: `${filteredAndSortedTasks.length * ROW_HEIGHT}px`,
-                position: 'relative'
-              }}
-            >
+            <tbody className="divide-y divide-slate-200">
               {visibleTasks.map(({ task, index }) => (
                 <tr
                   key={task.id}
                   onClick={() => onEditTask && onEditTask(task)}
-                  className="hover:bg-slate-50 cursor-pointer transition-colors absolute w-full"
+                  className="hover:bg-slate-50 cursor-pointer transition-colors"
                   style={{
                     height: `${ROW_HEIGHT}px`,
-                    top: `${index * ROW_HEIGHT}px`,
                   }}
                 >
-                  <td className="px-4 py-3 text-sm text-slate-800">{task.title}</td>
-                  <td className="px-4 py-3 text-sm text-slate-600">
+                  <td className="px-4 py-3 text-sm text-slate-800 truncate">{task.title}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600 truncate">
                     {task.assignments ? Object.keys(task.assignments).map(userId =>
                       companyData.userProfiles[userId] || 'User'
                     ).join(', ') : 'Unassigned'}
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-600">
+                  <td className="px-4 py-3 text-sm text-slate-600 truncate">
                     {companyData.plans[task.planId] || 'Unknown'}
                   </td>
                   <td className="px-4 py-3 text-sm">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
                       getTaskStatus(task) === 'completed' ? 'bg-green-100 text-green-700' :
                       getTaskStatus(task) === 'in-progress' ? 'bg-blue-100 text-blue-700' :
                       'bg-slate-100 text-slate-700'
@@ -677,11 +734,11 @@ export default function ManagerDashboard({
                       {getTaskStatus(task).replace('-', ' ')}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-600">
+                  <td className="px-4 py-3 text-sm text-slate-600 whitespace-nowrap">
                     {formatDate(task.dueDateTime)}
                   </td>
                   <td className="px-4 py-3 text-sm">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
                       task.priority === 1 ? 'bg-red-100 text-red-700' :
                       task.priority === 3 ? 'bg-orange-100 text-orange-700' :
                       task.priority === 5 ? 'bg-blue-100 text-blue-700' :

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { AlertCircle, Users, Calendar, Target, TrendingUp, Archive, Search, X, ChevronUp, ChevronDown, RefreshCw } from "../../../components/ui/icons";
+import { AlertCircle, Users, Calendar, Target, TrendingUp, Archive, Search, X, ChevronUp, ChevronDown, RefreshCw, Plus } from "../../../components/ui/icons";
+import NewTaskModal from "../../../components/tasks/NewTaskModal";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:7071';
 
@@ -41,6 +42,9 @@ export default function ManagerDashboard({
 
   // Track tasks currently being completed
   const [completingTasks, setCompletingTasks] = useState(new Set());
+
+  // New task modal state
+  const [showNewTaskModal, setShowNewTaskModal] = useState(false);
 
   // Fetch company-wide data from backend
   const fetchCompanyTasks = async () => {
@@ -471,17 +475,27 @@ export default function ManagerDashboard({
             )}
           </div>
         </div>
-        <button
-          onClick={handleManualRefresh}
-          disabled={refreshing}
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Refresh data"
-        >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-          <span className="text-sm font-medium text-slate-700">
-            {refreshing ? 'Refreshing...' : 'Refresh'}
-          </span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowNewTaskModal(true)}
+            className="flex items-center gap-2 px-4 py-2 gradient-primary text-white rounded-lg hover:opacity-90 transition-all shadow-md hover:shadow-lg"
+            title="Create new task"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="text-sm font-medium">New Task</span>
+          </button>
+          <button
+            onClick={handleManualRefresh}
+            disabled={refreshing}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Refresh data"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            <span className="text-sm font-medium text-slate-700">
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* Metrics Cards */}
@@ -887,6 +901,20 @@ export default function ManagerDashboard({
           )}
         </div>
       </div>
+
+      {/* New Task Modal */}
+      {showNewTaskModal && (
+        <NewTaskModal
+          accessToken={accessToken}
+          plans={companyData.plans}
+          buckets={companyData.buckets}
+          onClose={() => setShowNewTaskModal(false)}
+          onTaskCreated={() => {
+            setShowNewTaskModal(false);
+            handleManualRefresh(); // Refresh the task list after creating
+          }}
+        />
+      )}
     </div>
   );
 }

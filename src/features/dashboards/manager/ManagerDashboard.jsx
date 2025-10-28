@@ -183,6 +183,24 @@ export default function ManagerDashboard({
     return Object.keys(companyData.plans);
   }, [companyData.plans]);
 
+  // Helper functions (must be before useMemos that use them)
+  const getTaskStatus = (task) => {
+    if (task.percentComplete === 100) return 'completed';
+    if (task.percentComplete > 0) return 'in-progress';
+    return 'not-started';
+  };
+
+  const getPriorityLabel = (priority) => {
+    const labels = { 1: 'Urgent', 3: 'Important', 5: 'Medium', 9: 'Low' };
+    return labels[priority] || 'Medium';
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'No due date';
+    const date = new Date(dateString);
+    return date.toLocaleDateString();
+  };
+
   // Apply filters, search, and sorting to tasks
   const filteredAndSortedTasks = useMemo(() => {
     let filtered = [...allTasks];
@@ -311,24 +329,6 @@ export default function ManagerDashboard({
       index: startIndex + idx
     }));
   }, [filteredAndSortedTasks, scrollTop]);
-
-  // Helper functions
-  const getTaskStatus = (task) => {
-    if (task.percentComplete === 100) return 'completed';
-    if (task.percentComplete > 0) return 'in-progress';
-    return 'not-started';
-  };
-
-  const getPriorityLabel = (priority) => {
-    const labels = { 1: 'Urgent', 3: 'Important', 5: 'Medium', 9: 'Low' };
-    return labels[priority] || 'Medium';
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return 'No due date';
-    const date = new Date(dateString);
-    return date.toLocaleDateString();
-  };
 
   const handleSort = (column) => {
     if (sortBy === column) {

@@ -41,7 +41,7 @@ app.http('GetCompanyTasks', {
       const authHeader = request.headers.get('authorization');
 
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        context.log.error('No authorization header provided');
+        context.error('No authorization header provided');
         return {
           status: 401,
           headers: corsHeaders,
@@ -61,7 +61,7 @@ app.http('GetCompanyTasks', {
         user = await validateUserToken(userToken);
         context.log(`User validated: ${user.displayName}`);
       } catch (err) {
-        context.log.error('Token validation failed:', err.message);
+        context.error('Token validation failed:', err.message);
         return {
           status: 401,
           headers: corsHeaders,
@@ -77,7 +77,7 @@ app.http('GetCompanyTasks', {
       try {
         await checkManagerAuthorization(user, userToken);
       } catch (err) {
-        context.log.error('Authorization check failed:', err.message);
+        context.error('Authorization check failed:', err.message);
         return {
           status: 403,
           headers: corsHeaders,
@@ -109,7 +109,7 @@ app.http('GetCompanyTasks', {
       };
 
     } catch (err) {
-      context.log.error('Error in GetCompanyTasks:', err);
+      context.error('Error in GetCompanyTasks:', err);
 
       return {
         status: 500,
@@ -161,7 +161,7 @@ app.http('CompleteTask', {
       const authHeader = request.headers.get('authorization');
 
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        context.log.error('No authorization header provided');
+        context.error('No authorization header provided');
         return {
           status: 401,
           headers: corsHeaders,
@@ -181,7 +181,7 @@ app.http('CompleteTask', {
         user = await validateUserToken(userToken);
         context.log(`User validated: ${user.displayName}`);
       } catch (err) {
-        context.log.error('Token validation failed:', err.message);
+        context.error('Token validation failed:', err.message);
         return {
           status: 401,
           headers: corsHeaders,
@@ -197,7 +197,7 @@ app.http('CompleteTask', {
       try {
         await checkManagerAuthorization(user, userToken);
       } catch (err) {
-        context.log.error('Authorization check failed:', err.message);
+        context.error('Authorization check failed:', err.message);
         return {
           status: 403,
           headers: corsHeaders,
@@ -267,7 +267,7 @@ app.http('CompleteTask', {
       };
 
     } catch (error) {
-      context.log.error('Error completing task:', error);
+      context.error('Error completing task:', error);
 
       return {
         status: 500,

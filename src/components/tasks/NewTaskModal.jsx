@@ -202,14 +202,13 @@ export default function NewTaskModal({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Bucket *</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Bucket</label>
               <select
                 name="bucketId"
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                required
                 disabled={!selectedPlanId}
               >
-                <option value="">Select a bucket</option>
+                <option value="">Select a bucket (optional)</option>
                 {availableBuckets.map((bucket) => (
                   <option key={bucket.id} value={bucket.id}>{bucket.name}</option>
                 ))}

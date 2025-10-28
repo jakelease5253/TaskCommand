@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Check, X, Plus, Trash2, ChevronUp, ChevronDown, Edit } from "../ui/icons";
+import { Check, X, Plus, ChevronUp, ChevronDown, Edit } from "../ui/icons";
 
 /**
  * ChecklistEditor Component
@@ -296,7 +296,7 @@ export default function ChecklistEditor({ checklist = {}, onChange, readOnly = f
                     className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
                     title="Remove"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <X className="w-4 h-4" />
                   </button>
                 </>
               )}

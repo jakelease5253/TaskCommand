@@ -1,0 +1,22 @@
+{
+  "name": "taskcommand-backend",
+  "version": "1.0.0",
+  "description": "Azure Functions backend for TaskCommand with Microsoft Graph integration",
+  "main": "index.js",
+  "scripts": {
+    "start": "func start",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.0.0",
+    "@azure/identity": "^4.0.0",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
+    "isomorphic-fetch": "^3.0.0"
+  },
+  "devDependencies": {
+    "azure-functions-core-tools": "^4.0.5455"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

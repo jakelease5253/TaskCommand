@@ -17,6 +17,6 @@
     "azure-functions-core-tools": "^4.0.5455"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   }
 }

@@ -23,6 +23,7 @@ jobs:
           VITE_GRAPH_SCOPES: Tasks.ReadWrite,Group.Read.All,User.Read
         run: |
           echo "Using VITE_REDIRECT_URI=$VITE_REDIRECT_URI"
+          echo "Using VITE_BACKEND_URL=$VITE_BACKEND_URL"
           npm ci
           npm run build
           echo "---- dist listing ----"

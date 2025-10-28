@@ -373,6 +373,72 @@ export default function ManagerDashboard({
                           selectedPlans.length > 0 || selectedStatuses.length > 0 ||
                           dateRange !== 'all' || customStartDate || customEndDate;
 
+  // Handle task reopen with optimistic updates
+  const handleReopenTask = async (taskId, event) => {
+    // Prevent row click from firing
+    if (event) {
+      event.stopPropagation();
+    }
+
+    // Prevent duplicate operations
+    if (completingTasks.has(taskId)) {
+      console.log('Task already being processed:', taskId);
+      return;
+    }
+
+    console.log('Reopening task:', taskId);
+
+    // Mark task as being processed
+    setCompletingTasks(prev => new Set([...prev, taskId]));
+
+    // Optimistically update the task in local state
+    setCompanyData(prev => ({
+      ...prev,
+      tasks: prev.tasks.map(task =>
+        task.id === taskId ? { ...task, percentComplete: 0 } : task
+      )
+    }));
+
+    // Call backend endpoint to reopen task with application permissions
+    fetch(`${BACKEND_URL}/api/tasks/${taskId}/reopen`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    })
+      .then(response => {
+        if (!response.ok) {
+          return response.json().then(err => {
+            throw new Error(err.message || err.error || 'Failed to reopen task');
+          });
+        }
+        return response.json();
+      })
+      .then(() => {
+        console.log('Task reopened successfully:', taskId);
+        // Remove from processing set after success
+        setCompletingTasks(prev => {
+          const next = new Set(prev);
+          next.delete(taskId);
+          return next;
+        });
+      })
+      .catch(err => {
+        console.error('Error reopening task:', taskId, err.message);
+        // Remove from processing set on error
+        setCompletingTasks(prev => {
+          const next = new Set(prev);
+          next.delete(taskId);
+          return next;
+        });
+        // On error, restore the task (it wasn't reopened)
+        setError(`Failed to reopen task: ${err.message}`);
+        // Refetch to restore correct state
+        fetchCompanyTasks();
+      });
+  };
+
   // Handle task completion with optimistic updates
   const handleCompleteTask = async (taskId, event) => {
     // Prevent row click from firing
@@ -847,13 +913,23 @@ export default function ManagerDashboard({
                   }}
                 >
                   <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={false}
-                      onChange={(e) => handleCompleteTask(task.id, e)}
-                      className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
-                      title="Mark as complete"
-                    />
+                    {getTaskStatus(task) === 'completed' ? (
+                      <button
+                        onClick={(e) => handleReopenTask(task.id, e)}
+                        className="px-2 py-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded transition-colors"
+                        title="Reopen task"
+                      >
+                        Reopen
+                      </button>
+                    ) : (
+                      <input
+                        type="checkbox"
+                        checked={false}
+                        onChange={(e) => handleCompleteTask(task.id, e)}
+                        className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
+                        title="Mark as complete"
+                      />
+                    )}
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-800 truncate">{task.title}</td>
                   <td className="px-4 py-3 text-sm text-slate-600 truncate">

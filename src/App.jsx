@@ -592,6 +592,9 @@ function App() {
             {focusTask && (
               <FocusTaskCard
                 task={{...focusTask, description: focusTaskDetails?.description}}
+                checklist={focusTaskDetails?.checklist || {}}
+                detailsEtag={focusTaskDetails?.['@odata.etag']}
+                accessToken={auth.accessToken}
                 elapsed={focusTimer.elapsed}
                 planName={taskManager.plans[focusTask.planId]}
                 bucketName={getBucketName(focusTask)}
@@ -599,6 +602,11 @@ function App() {
                 onEdit={handleEditTask}
                 onUnfocus={handleSetFocusTask}
                 formatTime={formatTime}
+                onChecklistUpdate={async () => {
+                  // Refresh task details after checklist update
+                  const details = await taskManager.fetchTaskDetails(focusTask.id);
+                  setFocusTaskDetails(details);
+                }}
               />
             )}
 

@@ -1,8 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import { Target, Calendar, Clock, Folder, Edit, Check, AlertCircle } from "../ui/icons";
 
 export default function FocusTaskCard({
   task,
+  checklist = {},
+  detailsEtag,
+  accessToken,
   elapsed,
   planName,
   bucketName,
@@ -10,7 +13,55 @@ export default function FocusTaskCard({
   onEdit,
   onUnfocus,
   formatTime,
+  onChecklistUpdate,
 }) {
+  const [updatingChecklist, setUpdatingChecklist] = useState(false);
+  const [checklistError, setChecklistError] = useState(null);
+
+  const handleChecklistToggle = async (itemId, currentStatus) => {
+    if (updatingChecklist) return; // Prevent multiple simultaneous updates
+
+    setUpdatingChecklist(true);
+    setChecklistError(null);
+
+    try {
+      const response = await fetch(
+        `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            'If-Match': detailsEtag
+          },
+          body: JSON.stringify({
+            checklist: {
+              [itemId]: {
+                '@odata.type': '#microsoft.graph.plannerChecklistItem',
+                isChecked: !currentStatus
+              }
+            }
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || 'Failed to update checklist');
+      }
+
+      // Refresh the checklist data
+      if (onChecklistUpdate) {
+        await onChecklistUpdate();
+      }
+    } catch (err) {
+      console.error('Error updating checklist:', err);
+      setChecklistError(err.message);
+    } finally {
+      setUpdatingChecklist(false);
+    }
+  };
+
   const getDaysUntilDue = (task) => {
     if (!task.dueDateTime) return null;
     const dueDate = new Date(task.dueDateTime);
@@ -65,7 +116,49 @@ export default function FocusTaskCard({
               <p className="text-sm text-slate-700 whitespace-pre-wrap">{task.description}</p>
             </div>
           )}
-          
+
+          {/* Checklist Section */}
+          {Object.keys(checklist).length > 0 && (
+            <div className="mb-4">
+              <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                <Check className="w-4 h-4" />
+                Checklist ({Object.values(checklist).filter(item => item.isChecked).length}/{Object.keys(checklist).length})
+              </h4>
+              <div className="bg-white rounded-xl shadow-sm p-4 space-y-2">
+                {checklistError && (
+                  <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                    {checklistError}
+                  </div>
+                )}
+                {Object.entries(checklist)
+                  .sort((a, b) => {
+                    const orderA = a[1].orderHint || '';
+                    const orderB = b[1].orderHint || '';
+                    return orderA.localeCompare(orderB);
+                  })
+                  .map(([itemId, item]) => (
+                    <label
+                      key={itemId}
+                      className={`flex items-start gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors ${
+                        updatingChecklist ? 'opacity-50 pointer-events-none' : ''
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={item.isChecked}
+                        onChange={() => handleChecklistToggle(itemId, item.isChecked)}
+                        disabled={updatingChecklist}
+                        className="w-4 h-4 mt-0.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
+                      />
+                      <span className={`text-sm flex-1 ${item.isChecked ? 'line-through text-slate-500' : 'text-slate-700 font-medium'}`}>
+                        {item.title}
+                      </span>
+                    </label>
+                  ))}
+              </div>
+            </div>
+          )}
+
           {/* Task Details Grid */}
           <div className="grid grid-cols-2 gap-3 mb-4">
             <div className="flex items-center gap-2 text-sm text-slate-700">

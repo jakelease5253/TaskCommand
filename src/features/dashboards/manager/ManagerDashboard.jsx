@@ -112,7 +112,13 @@ export default function ManagerDashboard({
     }
   };
 
-  // Get all incomplete tasks for metrics and display
+  // Get all tasks (including completed)
+  // We'll filter by completion status in the main filter logic
+  const allTasks = useMemo(() => {
+    return companyData.tasks;
+  }, [companyData.tasks]);
+
+  // Get incomplete tasks for metrics only
   const incompleteTasks = useMemo(() => {
     return companyData.tasks.filter(task => task.percentComplete < 100);
   }, [companyData.tasks]);
@@ -179,7 +185,7 @@ export default function ManagerDashboard({
 
   // Apply filters, search, and sorting to tasks
   const filteredAndSortedTasks = useMemo(() => {
-    let filtered = [...incompleteTasks];
+    let filtered = [...allTasks];
 
     // Apply search filter
     if (searchQuery.trim()) {
@@ -207,10 +213,14 @@ export default function ManagerDashboard({
 
     // Filter by statuses
     if (selectedStatuses.length > 0) {
+      // If status filters are selected, show only those statuses
       filtered = filtered.filter(task => {
         const status = getTaskStatus(task);
         return selectedStatuses.includes(status);
       });
+    } else {
+      // By default (no status filter), hide completed tasks
+      filtered = filtered.filter(task => task.percentComplete < 100);
     }
 
     // Filter by date range
@@ -290,7 +300,7 @@ export default function ManagerDashboard({
     });
 
     return filtered;
-  }, [incompleteTasks, searchQuery, selectedAssignees, selectedPlans, selectedStatuses, dateRange, sortBy, sortDirection, companyData]);
+  }, [allTasks, searchQuery, selectedAssignees, selectedPlans, selectedStatuses, dateRange, sortBy, sortDirection, companyData, customStartDate, customEndDate]);
 
   // Virtual scrolling: Calculate which tasks to render
   const visibleTasks = useMemo(() => {
@@ -650,7 +660,7 @@ export default function ManagerDashboard({
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-slate-600">Status:</span>
             <div className="flex gap-1">
-              {['not-started', 'in-progress'].map(status => (
+              {['not-started', 'in-progress', 'completed'].map(status => (
                 <button
                   key={status}
                   onClick={() => toggleFilter('status', status)}

@@ -1,0 +1,16 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AZURE_TENANT_ID": "327a958f-68a1-40f6-aada-48a87827f0b1",
+    "AZURE_CLIENT_ID": "YOUR_BACKEND_APP_CLIENT_ID",
+    "AZURE_CLIENT_SECRET": "YOUR_CLIENT_SECRET",
+    "FRONTEND_CLIENT_ID": "8724797a-a121-4f6c-bc18-2cc72266a686",
+    "ALLOWED_ORIGINS": "http://localhost:3000,http://localhost:5173"
+  },
+  "Host": {
+    "CORS": "*",
+    "CORSCredentials": false
+  }
+}

@@ -665,10 +665,6 @@ function App() {
         {/* Manager Dashboard View */}
         {currentView === 'manager' && (
           <ManagerDashboard
-            tasks={taskManager.tasks}
-            plans={taskManager.plans}
-            buckets={taskManager.buckets}
-            userProfiles={taskManager.userProfiles}
             accessToken={auth.accessToken}
             onEditTask={handleEditTask}
           />

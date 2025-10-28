@@ -189,6 +189,13 @@ export const ChevronDown = ({ size = 16, ...p }) => (
   <Svg size={size} {...p}><polyline points="6 9 12 15 18 9" /></Svg>
 );
 
+export const Search = ({ size = 16, ...p }) => (
+  <Svg size={size} {...p}>
+    <circle cx="11" cy="11" r="8" />
+    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+  </Svg>
+);
+
 // Special: keeps className passthrough emphasized
 export const RefreshCw = ({ className = "", ...p }) => (
   <Svg className={className} {...p}>
@@ -218,6 +225,7 @@ export default {
   GripVertical,
   ChevronUp,
   ChevronDown,
+  Search,
   TrendingUp,
   BarChart,
   Award,

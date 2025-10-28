@@ -9,21 +9,11 @@ A living document to track features, improvements, and changes we want to implem
 ## 🎯 High Priority
 
 ### Features to Add
-- [ ] **Display checklists from task when task is in focus mode**
-  - Show all checklist items associated with the focused task
-  - Items should be clearly visible and organized
-  - Display completion status for each item
-  
-- [ ] **Ability to complete items from checklist when task is in focus mode**
-  - Users can check off checklist items directly from focus mode
-  - Updates should sync immediately with Microsoft Planner
-  - Visual feedback when items are completed
-  - Handle ETag-based concurrency control
-
 - [ ] **Real-time sync with Microsoft Planner**
   - Ensure all changes reflect immediately in Planner
   - Bidirectional updates (changes in Planner show in TaskCommand)
   - Handle conflicts gracefully
+  - Consider WebSocket or polling implementation
 
 ---
 
@@ -147,6 +137,11 @@ A living document to track features, improvements, and changes we want to implem
   - Project timeline forecasting
   - Resource allocation insights
 
+- [ ] **Edit tasks from Manager Dashboard**
+  - Click task row to open edit modal
+  - Full task editing capabilities for managers
+  - Update any task property (assignees, dates, priority, etc.)
+
 ### Settings & Configuration
 - [ ] **Settings Page**
   - User preferences and configurations
@@ -255,6 +250,66 @@ A living document to track features, improvements, and changes we want to implem
   - Refresh button with independent loading state
   - Clean, modern interface matching app design system
 
+#### Checklist System & Manager Enhancements (2025-10-28)
+
+- [x] **Comprehensive Checklist Functionality**
+  - **ChecklistEditor Component**
+    - Reusable component for all checklist operations
+    - Add new checklist items with auto-generated orderHint
+    - Edit item text inline with save/cancel buttons
+    - Remove individual items
+    - Reorder items with move up/down buttons
+    - Toggle completion with checkboxes
+    - Progress counter (X of Y completed)
+    - Support for read-only mode (Focus Mode) and full edit mode
+  - **Microsoft Planner OrderHint System**
+    - Proper orderHint generation for new items
+    - String-based sorting with localeCompare
+    - Items display in correct order matching Planner
+  - **EditTaskModal Checklist Management**
+    - Full checklist editor integrated
+    - Add/edit/remove/reorder checklist items when editing tasks
+    - Always visible (can add checklists to tasks without them)
+    - Changes saved when task is updated
+  - **NewTaskModal Checklist Creation**
+    - Create checklists when creating new tasks
+    - Full editor functionality during task creation
+    - Checklist saved with task details
+  - **Focus Mode Checklist Display**
+    - Display all checklist items with proper ordering
+    - Check/uncheck items in read-only mode
+    - Immediate save to Microsoft Planner
+    - Loading states and error handling
+    - Visual feedback with strikethrough for completed items
+
+- [x] **Manager Dashboard Enhancements**
+  - **Task Creation from Dashboard**
+    - "New Task" button in dashboard header
+    - Create tasks in any company plan
+    - Assign to any team member
+    - Set all task properties (title, description, priority, due date, bucket)
+    - Automatic refresh after task creation
+  - **No Assignee Filter**
+    - Filter to show tasks with no assignees
+    - Special "No Assignee" option in dropdown
+    - Helps identify unassigned work
+    - Proper filter chip display
+  - **Completed Tasks Management**
+    - View completed tasks (opt-in via status filter)
+    - Reopen completed tasks
+    - Backend endpoint: POST /api/tasks/{taskId}/reopen
+    - Default: hide completed tasks from view
+  - **Status Filters Fixed**
+    - Fixed white page bug when clicking status filters
+    - Proper JavaScript function hoisting
+    - All status filters (not-started, in-progress, completed) work correctly
+
+- [x] **Task Creation Simplification**
+  - Bucket field now optional (matching Microsoft Planner)
+  - Removed "required" attribute from bucket select
+  - Updated labels and placeholders
+  - More flexible task creation workflow
+
 ---
 
 ## 📝 Notes
@@ -267,11 +322,11 @@ A living document to track features, improvements, and changes we want to implem
 - **Integration focus:** Slack (company uses Slack, not Teams)
 
 ### Technical Considerations
-- Focus mode checklist features are top priority for immediate implementation
-- Manager interface will leverage existing Graph API permissions
-- All permissions already granted - ready to implement features
-- ETag-based concurrency control required for Planner updates
-- Consider rate limiting for bulk operations
+- Manager interface leverages existing Graph API permissions
+- All permissions already granted - ready to implement additional features
+- ETag-based concurrency control implemented for Planner updates
+- OrderHint system properly implemented for checklist sorting
+- Consider rate limiting for bulk operations in future enhancements
 
 ### Future Considerations
 - Could be commercialized for other companies using Planner
@@ -281,4 +336,4 @@ A living document to track features, improvements, and changes we want to implem
 
 ---
 
-**Last Updated:** 2025-10-27
+**Last Updated:** 2025-10-28

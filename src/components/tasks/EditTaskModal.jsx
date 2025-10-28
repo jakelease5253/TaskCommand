@@ -18,6 +18,7 @@ export default function EditTaskModal({
   const [selectedBucketId, setSelectedBucketId] = useState(task.bucketId || '');
   const [assignments, setAssignments] = useState({});
   const [users, setUsers] = useState([]);
+  const [checklist, setChecklist] = useState({});
 
   // Fetch the current task and details to get etags
   useEffect(() => {
@@ -48,6 +49,7 @@ export default function EditTaskModal({
         const detailsData = await detailsResponse.json();
         setDetailsEtag(detailsData['@odata.etag']);
         setCurrentDescription(detailsData.description || '');
+        setChecklist(detailsData.checklist || {});
 
         // Fetch group members for assignment
         if (taskData.planId) {
@@ -77,6 +79,58 @@ export default function EditTaskModal({
   }, [task.id, accessToken]); // Only depend on task.id, not the entire task object
 
   if (!task) return null;
+
+  // Handle checklist item toggle
+  const handleChecklistToggle = async (itemId) => {
+    try {
+      // Optimistically update the UI
+      const updatedChecklist = {
+        ...checklist,
+        [itemId]: {
+          ...checklist[itemId],
+          isChecked: !checklist[itemId].isChecked
+        }
+      };
+      setChecklist(updatedChecklist);
+
+      // Update the checklist on the server
+      const response = await fetch(
+        `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            'If-Match': detailsEtag
+          },
+          body: JSON.stringify({
+            checklist: {
+              [itemId]: {
+                '@odata.type': '#microsoft.graph.plannerChecklistItem',
+                isChecked: !checklist[itemId].isChecked
+              }
+            }
+          })
+        }
+      );
+
+      if (!response.ok) {
+        // Revert on failure
+        setChecklist(checklist);
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || 'Failed to update checklist');
+      }
+
+      // Update etag after successful update
+      const updatedDetails = await response.json();
+      setDetailsEtag(updatedDetails['@odata.etag']);
+    } catch (err) {
+      console.error('Error updating checklist:', err);
+      setError(err.message);
+      // Revert the optimistic update
+      setChecklist(checklist);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -308,6 +362,45 @@ export default function EditTaskModal({
             />
           </div>
 
+          {/* Checklist Section */}
+          {Object.keys(checklist).length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Checklist
+              </label>
+              <div className="border border-slate-300 rounded-lg p-4 space-y-2 bg-slate-50">
+                {Object.entries(checklist)
+                  .sort((a, b) => {
+                    // Sort by orderHint if available, otherwise by title
+                    const orderA = a[1].orderHint || '';
+                    const orderB = b[1].orderHint || '';
+                    return orderA.localeCompare(orderB);
+                  })
+                  .map(([itemId, item]) => (
+                    <label
+                      key={itemId}
+                      className="flex items-start gap-3 p-2 hover:bg-white rounded-lg cursor-pointer transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={item.isChecked}
+                        onChange={() => handleChecklistToggle(itemId)}
+                        className="w-4 h-4 mt-0.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
+                      />
+                      <span className={`text-sm flex-1 ${item.isChecked ? 'line-through text-slate-500' : 'text-slate-700'}`}>
+                        {item.title}
+                      </span>
+                    </label>
+                  ))}
+                <div className="pt-2 mt-2 border-t border-slate-200">
+                  <p className="text-xs text-slate-500">
+                    {Object.values(checklist).filter(item => item.isChecked).length} of {Object.keys(checklist).length} completed
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -330,16 +423,15 @@ export default function EditTaskModal({
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Bucket *
+                Bucket
               </label>
               <select
                 value={selectedBucketId}
                 onChange={(e) => setSelectedBucketId(e.target.value)}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                required
                 disabled={!selectedPlanId}
               >
-                <option value="">Select a bucket</option>
+                <option value="">Select a bucket (optional)</option>
                 {filteredBuckets.map(bucket => (
                   <option key={bucket.id} value={bucket.id}>
                     {bucket.name}

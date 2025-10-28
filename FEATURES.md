@@ -25,6 +25,12 @@ A living document to track features, improvements, and changes we want to implem
   - Bidirectional updates (changes in Planner show in TaskCommand)
   - Handle conflicts gracefully
 
+- [ ] **Simplify task creation requirements**
+  - Remove mandatory assignee requirement (optional in Planner)
+  - Remove mandatory bucket requirement (optional in Planner)
+  - Allow creating tasks with just title and plan
+  - Match Microsoft Planner's flexibility
+
 ---
 
 ## 🔮 Future Enhancements
@@ -126,6 +132,18 @@ A living document to track features, improvements, and changes we want to implem
   - Visual progress indicators
 
 ### Manager Interface 🔥 (Key Differentiator)
+- [ ] **Create tasks from Manager Dashboard**
+  - Add new tasks directly from the manager view
+  - Assign to any team member
+  - Set plan, bucket, priority, and due date
+  - Quick task creation without leaving dashboard
+
+- [ ] **Filter tasks with no assignee**
+  - View unassigned tasks across all plans
+  - Identify tasks that need assignment
+  - Filter option: "No Assignee" or "Unassigned"
+  - Help managers find orphaned tasks
+
 - [ ] **Set priorities for team members**
   - Assign priority levels that sync to individual user views
   - Override or suggest priority changes
@@ -281,4 +299,4 @@ A living document to track features, improvements, and changes we want to implem
 
 ---
 
-**Last Updated:** 2025-10-27
+**Last Updated:** 2025-10-28

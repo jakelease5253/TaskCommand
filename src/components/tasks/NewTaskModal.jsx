@@ -14,7 +14,6 @@ export default function NewTaskModal({
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [availableBuckets, setAvailableBuckets] = useState([]);
   const [planMembers, setPlanMembers] = useState([]);
-  const [selectedAssignees, setSelectedAssignees] = useState([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
 
   // Update available buckets when plan changes
@@ -72,7 +71,7 @@ export default function NewTaskModal({
     const bucketId = formData.get('bucketId');
     const dueDate = formData.get('dueDate');
     const priority = parseInt(formData.get('priority'));
-    const assignees = selectedAssignees;
+    const assignedToUserId = formData.get('assignedTo');
 
     try {
       // Create task
@@ -94,16 +93,14 @@ export default function NewTaskModal({
       }
 
       // Add assignment if a user is selected
-      if (assignees.length > 0) {
-        taskData.assignments = assignees.reduce((acc, id, idx) => {
-          acc[id] = {
+      if (assignedToUserId) {
+        taskData.assignments = {
+          [assignedToUserId]: {
             "@odata.type": "#microsoft.graph.plannerAssignment",
-            orderHint: " !",
-          };
-          return acc;
-        }, {});
+            orderHint: " !"
+          }
+        };
       }
-
 
       const response = await fetch('https://graph.microsoft.com/v1.0/planner/tasks', {
         method: 'POST',
@@ -223,37 +220,26 @@ export default function NewTaskModal({
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Assign To</label>
             <select
-              multiple
-              name="assignees"
-              value={selectedAssignees}
-              onChange={(e) =>
-                setSelectedAssignees([...e.target.selectedOptions].map(o => o.value))
-              }
+              name="assignedTo"
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               disabled={!selectedPlanId || loadingMembers}
+              defaultValue={currentUserId || ""}
             >
-              {!selectedPlanId ? (
-                <option value="">Select a plan first</option>
-              ) : loadingMembers ? (
-                <option value="">Loading members...</option>
-              ) : planMembers.length === 0 ? (
-                <option value="">No members found</option>
-              ) : (
-                planMembers.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.displayName || member.userPrincipalName}
-                  </option>
-                ))
-              )}
+              <option value="">Unassigned</option>
+              {planMembers.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.displayName || member.userPrincipalName}
+                </option>
+              ))}
             </select>
-            <p className="text-xs text-slate-500 mt-1">Hold ⌘/Ctrl to select multiple members.</p>
+            {loadingMembers && (
+              <p className="text-xs text-slate-500 mt-1">Loading members...</p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Due Date
-              </label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Due Date</label>
               <input
                 name="dueDate"
                 type="date"
@@ -262,9 +248,7 @@ export default function NewTaskModal({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Priority
-              </label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Priority</label>
               <select
                 name="priority"
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"

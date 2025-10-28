@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, AlertCircle } from "../ui/icons";
+import ChecklistEditor from "./ChecklistEditor";
 
 export default function EditTaskModal({
   task,
@@ -80,56 +81,10 @@ export default function EditTaskModal({
 
   if (!task) return null;
 
-  // Handle checklist item toggle
-  const handleChecklistToggle = async (itemId) => {
-    try {
-      // Optimistically update the UI
-      const updatedChecklist = {
-        ...checklist,
-        [itemId]: {
-          ...checklist[itemId],
-          isChecked: !checklist[itemId].isChecked
-        }
-      };
-      setChecklist(updatedChecklist);
-
-      // Update the checklist on the server
-      const response = await fetch(
-        `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-            'If-Match': detailsEtag
-          },
-          body: JSON.stringify({
-            checklist: {
-              [itemId]: {
-                '@odata.type': '#microsoft.graph.plannerChecklistItem',
-                isChecked: !checklist[itemId].isChecked
-              }
-            }
-          })
-        }
-      );
-
-      if (!response.ok) {
-        // Revert on failure
-        setChecklist(checklist);
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'Failed to update checklist');
-      }
-
-      // Update etag after successful update
-      const updatedDetails = await response.json();
-      setDetailsEtag(updatedDetails['@odata.etag']);
-    } catch (err) {
-      console.error('Error updating checklist:', err);
-      setError(err.message);
-      // Revert the optimistic update
-      setChecklist(checklist);
-    }
+  // Handle checklist changes (add, remove, edit, toggle)
+  const handleChecklistChange = (updatedChecklist) => {
+    // Just update local state - changes will be saved when form is submitted
+    setChecklist(updatedChecklist);
   };
 
   const handleSubmit = async (e) => {
@@ -203,8 +158,15 @@ export default function EditTaskModal({
         throw new Error(errorData.error?.message || 'Failed to update task');
       }
 
-      // Update description if it changed
-      if (description !== currentDescription) {
+      // Update description and/or checklist if changed
+      if (description !== currentDescription || JSON.stringify(checklist) !== JSON.stringify({})) {
+        const detailsUpdate = {};
+        if (description !== currentDescription) {
+          detailsUpdate.description = description;
+        }
+        // Always include checklist in the update
+        detailsUpdate.checklist = checklist;
+
         const detailsResponse = await fetch(
           `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`,
           {
@@ -214,13 +176,13 @@ export default function EditTaskModal({
               'Content-Type': 'application/json',
               'If-Match': detailsEtag
             },
-            body: JSON.stringify({ description })
+            body: JSON.stringify(detailsUpdate)
           }
         );
 
         if (!detailsResponse.ok) {
           const errorData = await detailsResponse.json();
-          throw new Error(errorData.error?.message || 'Failed to update description');
+          throw new Error(errorData.error?.message || 'Failed to update task details');
         }
       }
 
@@ -363,43 +325,18 @@ export default function EditTaskModal({
           </div>
 
           {/* Checklist Section */}
-          {Object.keys(checklist).length > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Checklist
-              </label>
-              <div className="border border-slate-300 rounded-lg p-4 space-y-2 bg-slate-50">
-                {Object.entries(checklist)
-                  .sort((a, b) => {
-                    // Sort by orderHint if available, otherwise by title
-                    const orderA = a[1].orderHint || '';
-                    const orderB = b[1].orderHint || '';
-                    return orderA.localeCompare(orderB);
-                  })
-                  .map(([itemId, item]) => (
-                    <label
-                      key={itemId}
-                      className="flex items-start gap-3 p-2 hover:bg-white rounded-lg cursor-pointer transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={item.isChecked}
-                        onChange={() => handleChecklistToggle(itemId)}
-                        className="w-4 h-4 mt-0.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
-                      />
-                      <span className={`text-sm flex-1 ${item.isChecked ? 'line-through text-slate-500' : 'text-slate-700'}`}>
-                        {item.title}
-                      </span>
-                    </label>
-                  ))}
-                <div className="pt-2 mt-2 border-t border-slate-200">
-                  <p className="text-xs text-slate-500">
-                    {Object.values(checklist).filter(item => item.isChecked).length} of {Object.keys(checklist).length} completed
-                  </p>
-                </div>
-              </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Checklist
+            </label>
+            <div className="border border-slate-300 rounded-lg p-4 bg-slate-50">
+              <ChecklistEditor
+                checklist={checklist}
+                onChange={handleChecklistChange}
+                editable={true}
+              />
             </div>
-          )}
+          </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>

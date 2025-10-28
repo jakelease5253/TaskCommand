@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Target, Calendar, Clock, Folder, Edit, Check, AlertCircle } from "../ui/icons";
+import ChecklistEditor from "../tasks/ChecklistEditor";
 
 export default function FocusTaskCard({
   task,
@@ -18,7 +19,8 @@ export default function FocusTaskCard({
   const [updatingChecklist, setUpdatingChecklist] = useState(false);
   const [checklistError, setChecklistError] = useState(null);
 
-  const handleChecklistToggle = async (itemId, currentStatus) => {
+  // Handle checklist changes and immediately save to server
+  const handleChecklistChange = async (updatedChecklist) => {
     if (updatingChecklist) return; // Prevent multiple simultaneous updates
 
     setUpdatingChecklist(true);
@@ -35,12 +37,7 @@ export default function FocusTaskCard({
             'If-Match': detailsEtag
           },
           body: JSON.stringify({
-            checklist: {
-              [itemId]: {
-                '@odata.type': '#microsoft.graph.plannerChecklistItem',
-                isChecked: !currentStatus
-              }
-            }
+            checklist: updatedChecklist
           })
         }
       );
@@ -57,6 +54,10 @@ export default function FocusTaskCard({
     } catch (err) {
       console.error('Error updating checklist:', err);
       setChecklistError(err.message);
+      // Refresh to revert changes
+      if (onChecklistUpdate) {
+        await onChecklistUpdate();
+      }
     } finally {
       setUpdatingChecklist(false);
     }
@@ -124,37 +125,19 @@ export default function FocusTaskCard({
                 <Check className="w-4 h-4" />
                 Checklist ({Object.values(checklist).filter(item => item.isChecked).length}/{Object.keys(checklist).length})
               </h4>
-              <div className="bg-white rounded-xl shadow-sm p-4 space-y-2">
+              <div className="bg-white rounded-xl shadow-sm p-4">
                 {checklistError && (
                   <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
                     {checklistError}
                   </div>
                 )}
-                {Object.entries(checklist)
-                  .sort((a, b) => {
-                    const orderA = a[1].orderHint || '';
-                    const orderB = b[1].orderHint || '';
-                    return orderA.localeCompare(orderB);
-                  })
-                  .map(([itemId, item]) => (
-                    <label
-                      key={itemId}
-                      className={`flex items-start gap-3 p-2 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors ${
-                        updatingChecklist ? 'opacity-50 pointer-events-none' : ''
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={item.isChecked}
-                        onChange={() => handleChecklistToggle(itemId, item.isChecked)}
-                        disabled={updatingChecklist}
-                        className="w-4 h-4 mt-0.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
-                      />
-                      <span className={`text-sm flex-1 ${item.isChecked ? 'line-through text-slate-500' : 'text-slate-700 font-medium'}`}>
-                        {item.title}
-                      </span>
-                    </label>
-                  ))}
+                <div className={updatingChecklist ? 'opacity-50 pointer-events-none' : ''}>
+                  <ChecklistEditor
+                    checklist={checklist}
+                    onChange={handleChecklistChange}
+                    readOnly={true}
+                  />
+                </div>
               </div>
             </div>
           )}

@@ -8,28 +8,26 @@ A living document to track features, improvements, and changes we want to implem
 
 ## 🎯 High Priority
 
-### In Progress
-- [ ] **Sync checklist item state with Planner in real time**
-  - Toggle handling in Focus Mode is optimistic and wired to call Planner
-  - ETag concurrency handling in place (412 → refetch + reconcile)
-  - **Next:** confirm backend endpoint or `taskManager.updateChecklistItem` is active in DEV
+### Features to Add
+- [ ] **Display checklists from task when task is in focus mode**
+  - Show all checklist items associated with the focused task
+  - Items should be clearly visible and organized
+  - Display completion status for each item
+  
+- [ ] **Ability to complete items from checklist when task is in focus mode**
+  - Users can check off checklist items directly from focus mode
+  - Updates should sync immediately with Microsoft Planner
+  - Visual feedback when items are completed
+  - Handle ETag-based concurrency control
 
-- [ ] **Slack Integration (Phase 1 — via Power Automate)**
-  - **Basic Reminders**
-    - Daily upcoming tasks at beginning of day
-    - Daily kudos of completed & focused tasks
-    - New assignment notifications
-  - Scaffolding + routes created; Settings stub ready to hold the PA URL
-  - **Next:** add `VITE_SLACK_FLOW_URL` in DEV only, wire Settings → PA flow call
+- [ ] **Real-time sync with Microsoft Planner**
+  - Ensure all changes reflect immediately in Planner
+  - Bidirectional updates (changes in Planner show in TaskCommand)
+  - Handle conflicts gracefully
 
-- [ ] **Manager & Admin Dashboards (MVP scaffolding)**
-  - Routes in place: `/manager`, `/admin` with real site header
-  - **Next:** Graph queries for “open tasks across plans” (direct reports / all company)
+---
 
-### Ready to Pick Up Next
-- [ ] **Checklist reorder → persist to Planner**
-  - UI drag–drop works and updates local state
-  - **Next:** implement backend/API to compute and PATCH `orderHint` + return new ETag
+## 🔮 Future Enhancements
 
 ### Core Functionality
 - [ ] **Task dependencies**
@@ -191,20 +189,8 @@ A living document to track features, improvements, and changes we want to implem
 
 ## ✅ Completed
 
-### 2025-10-23
-- [x] **Focus Mode: display checklist items** (only when task is focused)
-- [x] **Focus Mode: visual progress bar** for tasks with checklists
-- [x] **Focus Mode: description displayed** (details loaded only when focused)
-- [x] **Checklist order matches Planner** (sorted by `orderHint`)
-- [x] **Checklist drag–drop (optimistic)** in Focus Mode (persist TBD)
-- [x] **Checklist toggle (optimistic)** with ETag-aware Planner sync path
-- [x] **Hide progress bar when no checklist**
-- [x] **Spacing fix** under Focus Task card (added bottom margin)
-- [x] **DEV environment banner** (DEV only @ `localhost:3001`)
-- [x] **React Router wiring** for `/settings`, `/manager`, `/admin` using real site header (no change to main app layout)
-- [x] **Login restored** (kept original App.jsx wiring; no auth changes)
-
-### Earlier
+### 2025-10
+- [x] Initial feature list created (2025-10-20)
 - [x] Microsoft Planner API integration with authentication
 - [x] Azure Static Web App deployment
 - [x] Basic task display and management
@@ -271,17 +257,27 @@ A living document to track features, improvements, and changes we want to implem
 
 ---
 
-## 🔧 Known Issues / Bugs
+## 📝 Notes
 
-- [ ] **Checklist reorder not persisted** to Planner (drag and drop doesn't work at all)
-- [ ] **Checklist cannot complete items** checking the box does nothing
-- [ ] **Slack Phase 1** not yet calling PA flow (awaiting DEV URL + wiring)
-- [ ] **Manager/Admin pages** are stubs (no data yet)
-- [x] **Browser refresh returns use to login screen**
-- [x] **Priority Queue not persisting on browser refresh**
-- [x] **Setting focus crashing app**
-- [x] **Can't edit tasks from task list** button doesn't work
-- [x] **Update fails when changing plan** Supplied bucket ID is invalid or does not exists
+### Strategic Considerations
+- **Primary users:** FieldWorks employees company-wide
+- **Backend:** Microsoft Planner (no data migration needed)
+- **Authentication:** Azure AD/Entra (SSO with existing work accounts)
+- **Deployment:** Azure Static Web App (already configured)
+- **Integration focus:** Slack (company uses Slack, not Teams)
+
+### Technical Considerations
+- Focus mode checklist features are top priority for immediate implementation
+- Manager interface will leverage existing Graph API permissions
+- All permissions already granted - ready to implement features
+- ETag-based concurrency control required for Planner updates
+- Consider rate limiting for bulk operations
+
+### Future Considerations
+- Could be commercialized for other companies using Planner
+- Build as internal tool first, prove value, then decide on external offering
+- Potential to become standard at other organizations
+- Keep architecture clean for potential multi-tenant future
 
 ---
 

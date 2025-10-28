@@ -199,8 +199,23 @@ export default function ManagerDashboard({
     // Filter by assignees
     if (selectedAssignees.length > 0) {
       filtered = filtered.filter(task => {
-        if (!task.assignments) return false;
-        return selectedAssignees.some(assigneeId => task.assignments[assigneeId]);
+        // Check if filtering for unassigned tasks
+        if (selectedAssignees.includes('NO_ASSIGNEE')) {
+          // Include tasks with no assignments
+          if (!task.assignments || Object.keys(task.assignments).length === 0) {
+            return true;
+          }
+        }
+        // Check if task has any of the selected assignees
+        if (task.assignments) {
+          const hasSelectedAssignee = selectedAssignees.some(assigneeId =>
+            assigneeId !== 'NO_ASSIGNEE' && task.assignments[assigneeId]
+          );
+          if (hasSelectedAssignee) {
+            return true;
+          }
+        }
+        return false;
       });
     }
 
@@ -681,23 +696,22 @@ export default function ManagerDashboard({
           </div>
 
           {/* Assignee Filter */}
-          {uniqueAssignees.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-slate-600">Assignee:</span>
-              <select
-                value=""
-                onChange={(e) => e.target.value && toggleFilter('assignee', e.target.value)}
-                className="text-sm px-3 py-1 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="">Select assignee...</option>
-                {uniqueAssignees.map(userId => (
-                  <option key={userId} value={userId}>
-                    {companyData.userProfiles[userId] || 'User'}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-slate-600">Assignee:</span>
+            <select
+              value=""
+              onChange={(e) => e.target.value && toggleFilter('assignee', e.target.value)}
+              className="text-sm px-3 py-1 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">Select assignee...</option>
+              <option value="NO_ASSIGNEE">No Assignee</option>
+              {uniqueAssignees.map(userId => (
+                <option key={userId} value={userId}>
+                  {companyData.userProfiles[userId] || 'User'}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* Plan Filter */}
           {uniquePlans.length > 0 && (
@@ -732,7 +746,7 @@ export default function ManagerDashboard({
             ))}
             {selectedAssignees.map(userId => (
               <span key={userId} className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-700 text-xs font-medium rounded-lg">
-                {companyData.userProfiles[userId]}
+                {userId === 'NO_ASSIGNEE' ? 'No Assignee' : companyData.userProfiles[userId]}
                 <button onClick={() => toggleFilter('assignee', userId)} className="hover:text-indigo-900">
                   <X className="w-3 h-3" />
                 </button>

@@ -1,8 +1,12 @@
-import React from "react";
+import React, { useState } from "react";
 import { Target, Calendar, Clock, Folder, Edit, Check, AlertCircle } from "../ui/icons";
+import ChecklistEditor from "../tasks/ChecklistEditor";
 
 export default function FocusTaskCard({
   task,
+  checklist = {},
+  detailsEtag,
+  accessToken,
   elapsed,
   planName,
   bucketName,
@@ -10,7 +14,55 @@ export default function FocusTaskCard({
   onEdit,
   onUnfocus,
   formatTime,
+  onChecklistUpdate,
 }) {
+  const [updatingChecklist, setUpdatingChecklist] = useState(false);
+  const [checklistError, setChecklistError] = useState(null);
+
+  // Handle checklist changes and immediately save to server
+  const handleChecklistChange = async (updatedChecklist) => {
+    if (updatingChecklist) return; // Prevent multiple simultaneous updates
+
+    setUpdatingChecklist(true);
+    setChecklistError(null);
+
+    try {
+      const response = await fetch(
+        `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            'If-Match': detailsEtag
+          },
+          body: JSON.stringify({
+            checklist: updatedChecklist
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || 'Failed to update checklist');
+      }
+
+      // Refresh the checklist data
+      if (onChecklistUpdate) {
+        await onChecklistUpdate();
+      }
+    } catch (err) {
+      console.error('Error updating checklist:', err);
+      setChecklistError(err.message);
+      // Refresh to revert changes
+      if (onChecklistUpdate) {
+        await onChecklistUpdate();
+      }
+    } finally {
+      setUpdatingChecklist(false);
+    }
+  };
+
   const getDaysUntilDue = (task) => {
     if (!task.dueDateTime) return null;
     const dueDate = new Date(task.dueDateTime);
@@ -65,7 +117,31 @@ export default function FocusTaskCard({
               <p className="text-sm text-slate-700 whitespace-pre-wrap">{task.description}</p>
             </div>
           )}
-          
+
+          {/* Checklist Section */}
+          {Object.keys(checklist).length > 0 && (
+            <div className="mb-4">
+              <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                <Check className="w-4 h-4" />
+                Checklist ({Object.values(checklist).filter(item => item.isChecked).length}/{Object.keys(checklist).length})
+              </h4>
+              <div className="bg-white rounded-xl shadow-sm p-4">
+                {checklistError && (
+                  <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                    {checklistError}
+                  </div>
+                )}
+                <div className={updatingChecklist ? 'opacity-50 pointer-events-none' : ''}>
+                  <ChecklistEditor
+                    checklist={checklist}
+                    onChange={handleChecklistChange}
+                    readOnly={true}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Task Details Grid */}
           <div className="grid grid-cols-2 gap-3 mb-4">
             <div className="flex items-center gap-2 text-sm text-slate-700">

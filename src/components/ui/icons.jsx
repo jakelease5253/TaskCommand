@@ -196,6 +196,52 @@ export const Search = ({ size = 16, ...p }) => (
   </Svg>
 );
 
+export const Bell = ({ size = 16, ...p }) => (
+  <Svg size={size} {...p}>
+    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+  </Svg>
+);
+
+export const Settings = ({ size = 16, ...p }) => (
+  <Svg size={size} {...p}>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 1v6m0 6v6m5.196-13.804l-4.243 4.243m-2.121 2.121l-4.243 4.243M23 12h-6M7 12H1m16.804-5.196l-4.243 4.243m-2.121 2.121l-4.243 4.243" />
+  </Svg>
+);
+
+export const Link = ({ size = 16, ...p }) => (
+  <Svg size={size} {...p}>
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+  </Svg>
+);
+
+export const Unlink = ({ size = 16, ...p }) => (
+  <Svg size={size} {...p}>
+    <path d="M18.84 12.25l1.72-1.71h-.02a5.004 5.004 0 0 0-.12-7.07 5.006 5.006 0 0 0-6.95 0l-1.72 1.71" />
+    <path d="M5.17 11.75l-1.71 1.71a5.004 5.004 0 0 0 .12 7.07 5.006 5.006 0 0 0 6.95 0l1.71-1.71" />
+    <line x1="8" y1="2" x2="8" y2="5" />
+    <line x1="2" y1="8" x2="5" y2="8" />
+    <line x1="16" y1="19" x2="16" y2="22" />
+    <line x1="19" y1="16" x2="22" y2="16" />
+  </Svg>
+);
+
+export const Slack = ({ size = 20, ...p }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    className={p.className}
+    {...p}
+  >
+    <path d="M6 15a2 2 0 0 1-2 2 2 2 0 0 1-2-2 2 2 0 0 1 2-2h2v2m1 0a2 2 0 0 1 2-2 2 2 0 0 1 2 2v5a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-5m2-8a2 2 0 0 1-2-2 2 2 0 0 1 2-2 2 2 0 0 1 2 2v2H9m0 1a2 2 0 0 1 2 2 2 2 0 0 1-2 2H4a2 2 0 0 1-2-2 2 2 0 0 1 2-2h5m8 2a2 2 0 0 1 2-2 2 2 0 0 1 2 2 2 2 0 0 1-2 2h-2v-2m-1 0a2 2 0 0 1-2 2 2 2 0 0 1-2-2V4a2 2 0 0 1 2-2 2 2 0 0 1 2 2v5m-2 8a2 2 0 0 1 2 2 2 2 0 0 1-2 2 2 2 0 0 1-2-2v-2h2m0-1a2 2 0 0 1-2-2 2 2 0 0 1 2-2h5a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-5z"/>
+  </svg>
+);
+
 // Special: keeps className passthrough emphasized
 export const RefreshCw = ({ className = "", ...p }) => (
   <Svg className={className} {...p}>
@@ -232,4 +278,9 @@ export default {
   Zap,
   Filter,
   Archive,
+  Bell,
+  Settings,
+  Link,
+  Unlink,
+  Slack,
 };

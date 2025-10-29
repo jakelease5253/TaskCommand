@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, AlertCircle } from "../ui/icons";
+import ChecklistEditor from "./ChecklistEditor";
 
 export default function EditTaskModal({
   task,
@@ -18,6 +19,7 @@ export default function EditTaskModal({
   const [selectedBucketId, setSelectedBucketId] = useState(task.bucketId || '');
   const [assignments, setAssignments] = useState({});
   const [users, setUsers] = useState([]);
+  const [checklist, setChecklist] = useState({});
 
   // Fetch the current task and details to get etags
   useEffect(() => {
@@ -48,6 +50,7 @@ export default function EditTaskModal({
         const detailsData = await detailsResponse.json();
         setDetailsEtag(detailsData['@odata.etag']);
         setCurrentDescription(detailsData.description || '');
+        setChecklist(detailsData.checklist || {});
 
         // Fetch group members for assignment
         if (taskData.planId) {
@@ -77,6 +80,12 @@ export default function EditTaskModal({
   }, [task.id, accessToken]); // Only depend on task.id, not the entire task object
 
   if (!task) return null;
+
+  // Handle checklist changes (add, remove, edit, toggle)
+  const handleChecklistChange = (updatedChecklist) => {
+    // Just update local state - changes will be saved when form is submitted
+    setChecklist(updatedChecklist);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -149,8 +158,15 @@ export default function EditTaskModal({
         throw new Error(errorData.error?.message || 'Failed to update task');
       }
 
-      // Update description if it changed
-      if (description !== currentDescription) {
+      // Update description and/or checklist if changed
+      if (description !== currentDescription || JSON.stringify(checklist) !== JSON.stringify({})) {
+        const detailsUpdate = {};
+        if (description !== currentDescription) {
+          detailsUpdate.description = description;
+        }
+        // Always include checklist in the update
+        detailsUpdate.checklist = checklist;
+
         const detailsResponse = await fetch(
           `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`,
           {
@@ -160,13 +176,13 @@ export default function EditTaskModal({
               'Content-Type': 'application/json',
               'If-Match': detailsEtag
             },
-            body: JSON.stringify({ description })
+            body: JSON.stringify(detailsUpdate)
           }
         );
 
         if (!detailsResponse.ok) {
           const errorData = await detailsResponse.json();
-          throw new Error(errorData.error?.message || 'Failed to update description');
+          throw new Error(errorData.error?.message || 'Failed to update task details');
         }
       }
 
@@ -308,6 +324,20 @@ export default function EditTaskModal({
             />
           </div>
 
+          {/* Checklist Section */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Checklist
+            </label>
+            <div className="border border-slate-300 rounded-lg p-4 bg-slate-50">
+              <ChecklistEditor
+                checklist={checklist}
+                onChange={handleChecklistChange}
+                editable={true}
+              />
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -330,16 +360,15 @@ export default function EditTaskModal({
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Bucket *
+                Bucket
               </label>
               <select
                 value={selectedBucketId}
                 onChange={(e) => setSelectedBucketId(e.target.value)}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                required
                 disabled={!selectedPlanId}
               >
-                <option value="">Select a bucket</option>
+                <option value="">Select a bucket (optional)</option>
                 {filteredBuckets.map(bucket => (
                   <option key={bucket.id} value={bucket.id}>
                     {bucket.name}

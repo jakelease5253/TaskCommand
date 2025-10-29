@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, AlertCircle } from "../ui/icons";
+import ChecklistEditor from "./ChecklistEditor";
 
 export default function NewTaskModal({
   accessToken,
@@ -15,6 +16,7 @@ export default function NewTaskModal({
   const [availableBuckets, setAvailableBuckets] = useState([]);
   const [planMembers, setPlanMembers] = useState([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
+  const [checklist, setChecklist] = useState({});
 
   // Update available buckets when plan changes
   useEffect(() => {
@@ -118,12 +120,20 @@ export default function NewTaskModal({
 
       const newTask = await response.json();
 
-      // If there's a description, update task details
-      if (description) {
+      // If there's a description or checklist, update task details
+      if (description || Object.keys(checklist).length > 0) {
         const detailsResponse = await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${newTask.id}/details`, {
           headers: { 'Authorization': `Bearer ${accessToken}` }
         });
         const details = await detailsResponse.json();
+
+        const detailsUpdate = {};
+        if (description) {
+          detailsUpdate.description = description;
+        }
+        if (Object.keys(checklist).length > 0) {
+          detailsUpdate.checklist = checklist;
+        }
 
         await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${newTask.id}/details`, {
           method: 'PATCH',
@@ -132,7 +142,7 @@ export default function NewTaskModal({
             'Content-Type': 'application/json',
             'If-Match': details['@odata.etag']
           },
-          body: JSON.stringify({ description })
+          body: JSON.stringify(detailsUpdate)
         });
       }
 
@@ -184,6 +194,20 @@ export default function NewTaskModal({
             />
           </div>
 
+          {/* Checklist Section */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Checklist
+            </label>
+            <div className="border border-slate-300 rounded-lg p-4 bg-slate-50">
+              <ChecklistEditor
+                checklist={checklist}
+                onChange={setChecklist}
+                editable={true}
+              />
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Plan *</label>
@@ -202,14 +226,13 @@ export default function NewTaskModal({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Bucket *</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Bucket</label>
               <select
                 name="bucketId"
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                required
                 disabled={!selectedPlanId}
               >
-                <option value="">Select a bucket</option>
+                <option value="">Select a bucket (optional)</option>
                 {availableBuckets.map((bucket) => (
                   <option key={bucket.id} value={bucket.id}>{bucket.name}</option>
                 ))}

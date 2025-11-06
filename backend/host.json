@@ -8,10 +8,12 @@
       }
     }
   },
-  "extensionBundle": {
-    "id": "Microsoft.Azure.Functions.ExtensionBundle",
-    "version": "[4.*, 5.0.0)"
-  },
+  // TEMPORARY WORKAROUND: Commented out due to CDN connectivity issue
+  // Uncomment before deploying to production
+  // "extensionBundle": {
+  //   "id": "Microsoft.Azure.Functions.ExtensionBundle",
+  //   "version": "[4.*, 5.0.0)"
+  // },
   "extensions": {
     "http": {
       "routePrefix": "api"

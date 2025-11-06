@@ -133,9 +133,22 @@ function verifySlackRequest(headers, body) {
   const timestamp = headers['x-slack-request-timestamp'];
   const signature = headers['x-slack-signature'];
 
+  // Check if required headers exist
+  if (!timestamp || !signature) {
+    console.error('Missing Slack signature headers');
+    return false;
+  }
+
+  // Check if signing secret is configured
+  if (!SLACK_SIGNING_SECRET) {
+    console.error('SLACK_SIGNING_SECRET not configured');
+    return false;
+  }
+
   // Check timestamp to prevent replay attacks (within 5 minutes)
   const time = Math.floor(Date.now() / 1000);
   if (Math.abs(time - timestamp) > 60 * 5) {
+    console.error('Slack request timestamp too old');
     return false;
   }
 
@@ -145,10 +158,15 @@ function verifySlackRequest(headers, body) {
   const expectedSignature = 'v0=' + hmac.update(sigBaseString).digest('hex');
 
   // Compare signatures
-  return crypto.timingSafeEqual(
-    Buffer.from(expectedSignature),
-    Buffer.from(signature)
-  );
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(expectedSignature),
+      Buffer.from(signature)
+    );
+  } catch (error) {
+    console.error('Error comparing signatures:', error.message);
+    return false;
+  }
 }
 
 module.exports = {

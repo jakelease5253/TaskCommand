@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Target, Calendar, Clock, Folder, Edit, Check, AlertCircle } from "../ui/icons";
+import { Target, Calendar, Clock, Folder, Edit, Check, AlertCircle, Zap } from "../ui/icons";
 import ChecklistEditor from "../tasks/ChecklistEditor";
 
 export default function FocusTaskCard({
@@ -13,11 +13,27 @@ export default function FocusTaskCard({
   onComplete,
   onEdit,
   onUnfocus,
+  onEnterFocusMode,
   formatTime,
   onChecklistUpdate,
 }) {
   const [updatingChecklist, setUpdatingChecklist] = useState(false);
   const [checklistError, setChecklistError] = useState(null);
+
+  // Clean checklist by removing read-only properties
+  const cleanChecklist = (checklist) => {
+    const cleaned = {};
+    Object.keys(checklist).forEach(itemId => {
+      const item = checklist[itemId];
+      cleaned[itemId] = {
+        '@odata.type': item['@odata.type'] || '#microsoft.graph.plannerChecklistItem',
+        title: item.title,
+        isChecked: item.isChecked,
+        orderHint: item.orderHint
+      };
+    });
+    return cleaned;
+  };
 
   // Handle checklist changes and immediately save to server
   const handleChecklistChange = async (updatedChecklist) => {
@@ -27,6 +43,22 @@ export default function FocusTaskCard({
     setChecklistError(null);
 
     try {
+      // Fetch fresh etag before updating
+      const detailsResponse = await fetch(
+        `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`
+          }
+        }
+      );
+
+      const detailsData = await detailsResponse.json();
+      const freshEtag = detailsData['@odata.etag'];
+
+      // Clean the checklist before sending to API
+      const cleanedChecklist = cleanChecklist(updatedChecklist);
+
       const response = await fetch(
         `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`,
         {
@@ -34,10 +66,10 @@ export default function FocusTaskCard({
           headers: {
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
-            'If-Match': detailsEtag
+            'If-Match': freshEtag
           },
           body: JSON.stringify({
-            checklist: updatedChecklist
+            checklist: cleanedChecklist
           })
         }
       );
@@ -100,129 +132,313 @@ export default function FocusTaskCard({
   const overdue = isOverdue(task);
 
   return (
-    <div className="mb-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl shadow-lg p-6 border-2 border-blue-200">
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex-1">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-3 h-3 rounded-full animate-pulse bg-blue-500" />
-            <h3 className="text-lg font-semibold text-slate-800">
-              🎯 Focus Mode Active
-            </h3>
+    <div style={{
+      backgroundColor: '#ffffff',
+      borderRadius: '12px',
+      border: '1px solid #e5e7eb',
+      boxShadow: '0px 2px 8px rgba(0,0,0,0.08)',
+      marginBottom: '24px'
+    }}>
+      <div style={{ display: 'flex', padding: '20px', paddingBottom: '12px' }}>
+        {/* Left Content */}
+        <div style={{ flex: 1, paddingRight: '20px' }}>
+          {/* Title */}
+          <h3 style={{
+            fontFamily: 'Poppins',
+            fontSize: '28px',
+            fontWeight: '900',
+            color: 'var(--theme-primary-dark)',
+            marginBottom: '12px',
+            marginTop: 0
+          }}>
+            {task.title}
+          </h3>
+
+          {/* Plan/Bucket Info */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+            <Folder size={16} style={{ color: 'var(--theme-primary-dark)' }} />
+            <span style={{
+              fontFamily: 'Poppins',
+              fontSize: '13px',
+              fontWeight: '400',
+              color: 'var(--theme-primary-dark)'
+            }}>
+              {planName} : {bucketName || 'To Do'}
+            </span>
           </div>
-          <h4 className="text-2xl font-bold text-slate-900 mb-4">{task.title}</h4>
-          
-          {/* Task Description */}
+
+          {/* Description */}
           {task.description && (
-            <div className="mb-4 p-4 bg-white rounded-xl shadow-sm">
-              <p className="text-sm text-slate-700 whitespace-pre-wrap">{task.description}</p>
+            <div style={{
+              backgroundColor: '#f3f4f6',
+              borderRadius: '16px',
+              padding: '20px',
+              marginBottom: '20px',
+              border: '1px solid #e5e7eb'
+            }}>
+              <p style={{
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                color: 'var(--theme-primary-dark)',
+                whiteSpace: 'pre-wrap',
+                margin: 0,
+                lineHeight: '1.6'
+              }}>
+                {task.description}
+              </p>
             </div>
           )}
 
-          {/* Checklist Section */}
+          {/* Checklist */}
           {Object.keys(checklist).length > 0 && (
-            <div className="mb-4">
-              <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-                <Check className="w-4 h-4" />
-                Checklist ({Object.values(checklist).filter(item => item.isChecked).length}/{Object.keys(checklist).length})
-              </h4>
-              <div className="bg-white rounded-xl shadow-sm p-4">
-                {checklistError && (
-                  <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
-                    {checklistError}
-                  </div>
-                )}
-                <div className={updatingChecklist ? 'opacity-50 pointer-events-none' : ''}>
-                  <ChecklistEditor
-                    checklist={checklist}
-                    onChange={handleChecklistChange}
-                    readOnly={true}
-                  />
+            <div style={{ marginBottom: '16px' }}>
+              {checklistError && (
+                <div style={{
+                  marginBottom: '8px',
+                  padding: '8px',
+                  backgroundColor: '#fee2e2',
+                  border: '1px solid #fca5a5',
+                  borderRadius: '8px',
+                  fontFamily: 'Poppins',
+                  fontSize: '12px',
+                  color: '#dc2626'
+                }}>
+                  {checklistError}
                 </div>
+              )}
+              <div className={updatingChecklist ? 'opacity-50 pointer-events-none' : ''}>
+                <ChecklistEditor
+                  checklist={checklist}
+                  onChange={handleChecklistChange}
+                  readOnly={true}
+                />
               </div>
             </div>
           )}
 
-          {/* Task Details Grid */}
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <div className="flex items-center gap-2 text-sm text-slate-700">
-              <Folder className="text-blue-600" />
-              <span className="font-medium">{planName}</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-slate-700">
-              <span className="font-medium">{bucketName || 'No Bucket'}</span>
-            </div>
-            {task.dueDateTime && (
-              <div className="flex items-center gap-2 text-sm text-slate-700">
-                <Calendar className="text-blue-600" />
-                <span>{new Date(task.dueDateTime).toLocaleDateString()}</span>
-              </div>
-            )}
-            <div className="flex items-center gap-2">
-              <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
-                {getPriorityLabel(task.priority)}
-              </span>
-            </div>
-          </div>
-
-          {/* Focus Timer */}
-          <div className="bg-white rounded-xl p-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Clock className="text-blue-600" />
-                <span className="text-sm font-medium text-slate-700">Focus Time:</span>
-              </div>
-              <div className="text-2xl font-mono font-bold text-blue-600">
-                {formatTime(elapsed)}
-              </div>
-            </div>
-          </div>
-
-          {/* Overdue Warning */}
+          {/* Overdue/Due Soon Warnings */}
           {overdue && (
-            <div className="mt-3 flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
-              <AlertCircle />
-              <span className="font-medium">This task is overdue!</span>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 12px',
+              backgroundColor: '#fee2e2',
+              borderRadius: '8px',
+              marginBottom: '16px'
+            }}>
+              <AlertCircle size={16} style={{ color: '#dc2626' }} />
+              <span style={{
+                fontFamily: 'Poppins',
+                fontSize: '13px',
+                fontWeight: '500',
+                color: '#dc2626'
+              }}>
+                This task is overdue!
+              </span>
             </div>
           )}
           {!overdue && daysUntil !== null && daysUntil <= 3 && daysUntil > 0 && (
-            <div className="mt-3 flex items-center gap-2 text-sm text-orange-600 bg-orange-50 rounded-lg px-3 py-2">
-              <AlertCircle />
-              <span className="font-medium">Due in {daysUntil} day{daysUntil !== 1 ? 's' : ''}</span>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 12px',
+              backgroundColor: '#fed7aa',
+              borderRadius: '8px',
+              marginBottom: '16px'
+            }}>
+              <AlertCircle size={16} style={{ color: '#ea580c' }} />
+              <span style={{
+                fontFamily: 'Poppins',
+                fontSize: '13px',
+                fontWeight: '500',
+                color: '#ea580c'
+              }}>
+                Due in {daysUntil} day{daysUntil !== 1 ? 's' : ''}
+              </span>
             </div>
           )}
         </div>
 
-        <div className="flex flex-col gap-2 ml-6">
+        {/* Right Action Buttons */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '280px' }}>
+          {onEnterFocusMode && (
+            <button
+              type="button"
+              onClick={onEnterFocusMode}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '12px 20px',
+                height: '44px',
+                backgroundColor: 'var(--theme-primary)',
+                color: 'var(--theme-primary-dark)',
+                border: 'none',
+                borderRadius: '12px',
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                boxShadow: '0px 2px 8px rgba(0,0,0,0.15)',
+                transition: 'all 0.2s ease',
+                width: '100%'
+              }}
+              title="Enter immersive focus mode"
+            >
+              <Zap size={18} style={{ color: 'var(--theme-primary-dark)' }} />
+              Enter Focus Mode
+            </button>
+          )}
           {onUnfocus && (
             <button
               type="button"
               onClick={() => onUnfocus(task)}
-              className="px-6 py-3 rounded-xl gradient-primary text-white hover:opacity-90 transition-all font-medium shadow-md hover:shadow-lg flex items-center gap-2"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '12px 20px',
+                height: '44px',
+                backgroundColor: 'var(--theme-primary-dark)',
+                color: 'var(--theme-primary)',
+                border: 'none',
+                borderRadius: '12px',
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                boxShadow: '0px 2px 8px rgba(0,0,0,0.15)',
+                transition: 'all 0.2s ease',
+                width: '100%'
+              }}
               title="Stop focusing on this task"
             >
-              <Target />
-              Unfocus
+              <Target size={18} style={{ color: 'var(--theme-primary)' }} />
+              Unfocus Task
             </button>
           )}
           {onEdit && (
             <button
               type="button"
               onClick={() => onEdit(task)}
-              className="px-6 py-3 rounded-xl bg-white border-2 border-slate-300 text-slate-700 hover:bg-slate-50 transition-all font-medium shadow-md hover:shadow-lg flex items-center gap-2"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '12px 20px',
+                height: '44px',
+                backgroundColor: 'var(--theme-primary)',
+                color: 'var(--theme-primary-dark)',
+                border: 'none',
+                borderRadius: '12px',
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                boxShadow: '0px 2px 8px rgba(0,0,0,0.15)',
+                transition: 'all 0.2s ease',
+                width: '100%'
+              }}
             >
-              <Edit />
+              <Edit size={18} style={{ color: 'var(--theme-primary-dark)' }} />
               Edit Task
             </button>
           )}
           <button
             type="button"
             onClick={onComplete}
-            className="px-6 py-3 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700 transition-all font-medium shadow-md hover:shadow-lg flex items-center gap-2"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '12px 20px',
+              height: '44px',
+              backgroundColor: 'var(--theme-primary-dark)',
+              color: 'var(--theme-primary)',
+              border: 'none',
+              borderRadius: '12px',
+              fontFamily: 'Poppins',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              boxShadow: '0px 2px 8px rgba(0,0,0,0.15)',
+              transition: 'all 0.2s ease',
+              width: '100%'
+            }}
           >
-            <Check />
+            <Check size={18} style={{ color: 'var(--theme-primary)' }} />
             Complete Task
           </button>
         </div>
+      </div>
+
+      {/* Due Date */}
+      {task.dueDateTime && (
+        <div style={{
+          fontFamily: 'Poppins',
+          fontSize: '13px',
+          fontWeight: '600',
+          color: 'var(--theme-primary-dark)',
+          padding: '0 20px 12px 20px'
+        }}>
+          Due Date: {new Date(task.dueDateTime).toLocaleDateString('en-US', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric'
+          })}
+        </div>
+      )}
+
+      {/* Focus Timer Bar */}
+      <div style={{
+        backgroundColor: 'var(--theme-primary)',
+        borderRadius: '24px',
+        padding: '12px 36px',
+        margin: '0 20px 20px 20px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        height: '48px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="var(--theme-primary-dark)">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 6v6l4 2" stroke="var(--theme-primary)" strokeWidth="2" strokeLinecap="round" fill="none"/>
+          </svg>
+          <span style={{
+            fontFamily: 'Poppins',
+            fontSize: '15px',
+            fontWeight: '400',
+            color: 'var(--theme-primary-dark)'
+          }}>
+            Focus Timer:
+          </span>
+        </div>
+        <span style={{
+          fontFamily: 'Poppins',
+          fontSize: '24px',
+          fontWeight: '700',
+          color: 'var(--theme-primary-dark)'
+        }}>
+          {(() => {
+            const totalSeconds = elapsed;
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+
+            if (hours > 0) {
+              return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            } else {
+              return `${minutes}:${String(seconds).padStart(2, '0')}`;
+            }
+          })()}
+        </span>
       </div>
     </div>
   );

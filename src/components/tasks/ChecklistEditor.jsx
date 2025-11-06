@@ -37,26 +37,55 @@ export default function ChecklistEditor({ checklist = {}, onChange, readOnly = f
   }, [checklist]);
 
   // Generate a new orderHint between two items or at the end
+  // Microsoft Planner uses lexicographically sortable strings
   const generateOrderHint = (prevOrderHint = '', nextOrderHint = '') => {
     if (!prevOrderHint && !nextOrderHint) {
-      // First item
+      // First item - use a simple starting value
       return ' !';
     }
     if (!nextOrderHint) {
-      // Last item - append to previous
-      return `${prevOrderHint}!`;
+      // Last item - append a character that sorts after the previous
+      // Add a space and exclamation to ensure it sorts after
+      return `${prevOrderHint} !`;
     }
     if (!prevOrderHint) {
-      // First item when items exist - prepend
+      // First item when items exist - prepend a space
       return ` ${nextOrderHint}`;
     }
-    // Between two items - use midpoint logic
-    return `${prevOrderHint} !`;
+    // Between two items - generate a midpoint value
+    // Simple approach: take the previous hint and add a space
+    return `${prevOrderHint} `;
   };
 
   // Generate a unique ID for new items
   const generateItemId = () => {
     return `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  };
+
+  // Clean checklist item by removing read-only properties
+  const cleanChecklistItem = (item, includeOrderHint = false) => {
+    const cleaned = {
+      '@odata.type': item['@odata.type'] || '#microsoft.graph.plannerChecklistItem',
+      title: item.title,
+      isChecked: item.isChecked
+    };
+
+    // Only include orderHint if explicitly requested (for reordering operations)
+    // and if it's in a valid format (contains spaces or exclamation points)
+    if (includeOrderHint && item.orderHint && /[ !]/.test(item.orderHint)) {
+      cleaned.orderHint = item.orderHint;
+    }
+
+    return cleaned;
+  };
+
+  // Clean entire checklist object by removing read-only properties from all items
+  const cleanEntireChecklist = (checklistObj, includeOrderHint = false) => {
+    const cleaned = {};
+    Object.keys(checklistObj).forEach(itemId => {
+      cleaned[itemId] = cleanChecklistItem(checklistObj[itemId], includeOrderHint);
+    });
+    return cleaned;
   };
 
   // Handle adding a new item
@@ -100,7 +129,8 @@ export default function ChecklistEditor({ checklist = {}, onChange, readOnly = f
         isChecked: !item.isChecked
       }
     };
-    onChange(updatedChecklist);
+    // Clean entire checklist before calling onChange
+    onChange(cleanEntireChecklist(updatedChecklist));
   };
 
   // Handle editing item text
@@ -125,7 +155,8 @@ export default function ChecklistEditor({ checklist = {}, onChange, readOnly = f
         title: editingText.trim()
       }
     };
-    onChange(updatedChecklist);
+    // Clean entire checklist before calling onChange
+    onChange(cleanEntireChecklist(updatedChecklist));
     setEditingItemId(null);
   };
 
@@ -156,7 +187,8 @@ export default function ChecklistEditor({ checklist = {}, onChange, readOnly = f
       }
     };
 
-    onChange(updatedChecklist);
+    // Clean entire checklist before calling onChange, including orderHints for reordering
+    onChange(cleanEntireChecklist(updatedChecklist, true));
   };
 
   const handleMoveDown = (index) => {
@@ -180,7 +212,8 @@ export default function ChecklistEditor({ checklist = {}, onChange, readOnly = f
       }
     };
 
-    onChange(updatedChecklist);
+    // Clean entire checklist before calling onChange, including orderHints for reordering
+    onChange(cleanEntireChecklist(updatedChecklist, true));
   };
 
   // Read-only view (for Focus Mode)

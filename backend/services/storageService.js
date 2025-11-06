@@ -9,7 +9,8 @@ const TABLES = {
   SLACK_USER_MAPPINGS: 'SlackUserMappings',
   NOTIFICATION_PREFERENCES: 'NotificationPreferences',
   MILESTONE_TRACKING: 'MilestoneTracking',
-  SLACK_MESSAGE_TASK_LINKS: 'SlackMessageTaskLinks'
+  SLACK_MESSAGE_TASK_LINKS: 'SlackMessageTaskLinks',
+  TASK_CHECK_TRACKING: 'TaskCheckTracking'
 };
 
 // Encryption key for sensitive data (tokens)
@@ -21,6 +22,7 @@ const slackMappingsClient = TableClient.fromConnectionString(connectionString, T
 const notificationPrefsClient = TableClient.fromConnectionString(connectionString, TABLES.NOTIFICATION_PREFERENCES);
 const milestonesClient = TableClient.fromConnectionString(connectionString, TABLES.MILESTONE_TRACKING);
 const messageLinksClient = TableClient.fromConnectionString(connectionString, TABLES.SLACK_MESSAGE_TASK_LINKS);
+const taskCheckClient = TableClient.fromConnectionString(connectionString, TABLES.TASK_CHECK_TRACKING);
 
 /**
  * Initialize all tables (create if they don't exist)
@@ -59,6 +61,15 @@ async function initializeTables() {
   } catch (error) {
     if (error.statusCode !== 409) {
       console.error('Error creating SlackMessageTaskLinks table:', error);
+    }
+  }
+
+  try {
+    await taskCheckClient.createTable();
+    console.log('Created TaskCheckTracking table');
+  } catch (error) {
+    if (error.statusCode !== 409) {
+      console.error('Error creating TaskCheckTracking table:', error);
     }
   }
 }
@@ -204,7 +215,11 @@ const DEFAULT_PREFERENCES = {
   timezone: 'America/New_York',
   digestGrouping: 'priority',
   channelType: 'dm',
-  teamChannelId: null
+  teamChannelId: null,
+  defaultPlanId: null,
+  defaultBucketId: null,
+  defaultPlanName: null,
+  defaultBucketName: null
 };
 
 /**
@@ -407,6 +422,42 @@ async function getMessageLinksForTask(taskId) {
 }
 
 // ============================================================================
+// TASK CHECK TRACKING (for polling-based notifications)
+// ============================================================================
+
+/**
+ * Get the last time we checked for task changes for a user
+ * @param {string} azureUserId
+ * @returns {Promise<string|null>} ISO timestamp of last check, or null if never checked
+ */
+async function getLastTaskCheckTime(azureUserId) {
+  try {
+    const entity = await taskCheckClient.getEntity('taskCheck', azureUserId);
+    return entity.lastCheckTime;
+  } catch (error) {
+    if (error.statusCode === 404) {
+      return null; // Never checked before
+    }
+    throw error;
+  }
+}
+
+/**
+ * Set the last time we checked for task changes for a user
+ * @param {string} azureUserId
+ * @param {string} timestamp - ISO timestamp
+ */
+async function setLastTaskCheckTime(azureUserId, timestamp) {
+  const entity = {
+    partitionKey: 'taskCheck',
+    rowKey: azureUserId,
+    lastCheckTime: timestamp
+  };
+
+  await taskCheckClient.upsertEntity(entity);
+}
+
+// ============================================================================
 // EXPORTS
 // ============================================================================
 
@@ -434,6 +485,10 @@ module.exports = {
   // Message Task Links
   saveMessageTaskLink,
   getMessageLinksForTask,
+
+  // Task Check Tracking
+  getLastTaskCheckTime,
+  setLastTaskCheckTime,
 
   // Table names (for reference)
   TABLES

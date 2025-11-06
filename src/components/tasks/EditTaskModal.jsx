@@ -15,11 +15,13 @@ export default function EditTaskModal({
   const [taskEtag, setTaskEtag] = useState(null);
   const [detailsEtag, setDetailsEtag] = useState(null);
   const [currentDescription, setCurrentDescription] = useState('');
+  const [originalDescription, setOriginalDescription] = useState('');
   const [selectedPlanId, setSelectedPlanId] = useState(task.planId || '');
   const [selectedBucketId, setSelectedBucketId] = useState(task.bucketId || '');
   const [assignments, setAssignments] = useState({});
   const [users, setUsers] = useState([]);
   const [checklist, setChecklist] = useState({});
+  const [originalChecklist, setOriginalChecklist] = useState({});
 
   // Fetch the current task and details to get etags
   useEffect(() => {
@@ -49,8 +51,12 @@ export default function EditTaskModal({
         );
         const detailsData = await detailsResponse.json();
         setDetailsEtag(detailsData['@odata.etag']);
-        setCurrentDescription(detailsData.description || '');
-        setChecklist(detailsData.checklist || {});
+        const desc = detailsData.description || '';
+        const checklistData = detailsData.checklist || {};
+        setCurrentDescription(desc);
+        setOriginalDescription(desc);
+        setChecklist(checklistData);
+        setOriginalChecklist(checklistData);
 
         // Fetch group members for assignment
         if (taskData.planId) {
@@ -96,6 +102,7 @@ export default function EditTaskModal({
     const title = formData.get('title');
     const dueDate = formData.get('dueDate');
     const priority = parseInt(formData.get('priority'));
+    const percentComplete = parseInt(formData.get('status'));
     const description = formData.get('description');
 
     try {
@@ -114,10 +121,11 @@ export default function EditTaskModal({
         }
       });
 
-      // Update basic task properties (title, priority, due date, plan, bucket, assignments)
+      // Update basic task properties (title, priority, percentComplete, due date, plan, bucket, assignments)
       const updateData = {
         title,
         priority,
+        percentComplete,
         assignments: cleanedAssignments
       };
 
@@ -159,13 +167,25 @@ export default function EditTaskModal({
       }
 
       // Update description and/or checklist if changed
-      if (description !== currentDescription || JSON.stringify(checklist) !== JSON.stringify({})) {
+      const descriptionChanged = description !== originalDescription;
+      const checklistChanged = JSON.stringify(checklist) !== JSON.stringify(originalChecklist);
+
+      if (descriptionChanged || checklistChanged) {
         const detailsUpdate = {};
-        if (description !== currentDescription) {
+        if (descriptionChanged) {
           detailsUpdate.description = description;
         }
-        // Always include checklist in the update
-        detailsUpdate.checklist = checklist;
+        if (checklistChanged) {
+          detailsUpdate.checklist = checklist;
+        }
+
+        // Fetch fresh etag before updating details
+        const freshDetailsResponse = await fetch(
+          `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`,
+          { headers: { 'Authorization': `Bearer ${accessToken}` } }
+        );
+        const freshDetailsData = await freshDetailsResponse.json();
+        const freshDetailsEtag = freshDetailsData['@odata.etag'];
 
         const detailsResponse = await fetch(
           `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`,
@@ -174,7 +194,7 @@ export default function EditTaskModal({
             headers: {
               'Authorization': `Bearer ${accessToken}`,
               'Content-Type': 'application/json',
-              'If-Match': detailsEtag
+              'If-Match': freshDetailsEtag
             },
             body: JSON.stringify(detailsUpdate)
           }
@@ -186,9 +206,21 @@ export default function EditTaskModal({
         }
       }
 
-      // Call the callback if it exists
+      // Construct the updated task object to pass back for optimistic update
+      const updatedTask = {
+        ...task,
+        title,
+        priority,
+        percentComplete,
+        dueDateTime: updateData.dueDateTime,
+        planId: updateData.planId || task.planId,
+        bucketId: updateData.bucketId || task.bucketId,
+        assignments: cleanedAssignments
+      };
+
+      // Call the callback if it exists, passing the updated task data
       if (typeof onTaskUpdated === 'function') {
-        onTaskUpdated();
+        onTaskUpdated(updatedTask);
       } else {
         console.error('onTaskUpdated is not a function:', onTaskUpdated);
         // Close modal anyway
@@ -269,15 +301,34 @@ export default function EditTaskModal({
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b border-slate-200">
+        <div style={{
+          padding: '24px',
+          borderBottom: '2px solid var(--theme-primary)',
+          backgroundColor: 'var(--theme-primary-dark)'
+        }}>
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-semibold text-slate-800">Edit Task</h2>
-            <button 
-              type="button" 
-              onClick={onClose} 
-              className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+            <h2 style={{
+              fontSize: '24px',
+              fontWeight: '600',
+              fontFamily: 'Poppins',
+              color: 'var(--theme-primary)',
+              margin: 0
+            }}>Edit Task</h2>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                padding: '8px',
+                backgroundColor: 'var(--theme-primary)',
+                borderRadius: '8px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
             >
-              <X />
+              <X style={{ color: 'var(--theme-primary-dark)' }} />
             </button>
           </div>
         </div>
@@ -298,27 +349,57 @@ export default function EditTaskModal({
           )}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label style={{
+              display: 'block',
+              fontSize: '13px',
+              fontWeight: '500',
+              fontFamily: 'Poppins',
+              color: 'var(--theme-primary-dark)',
+              marginBottom: '8px'
+            }}>
               Task Title *
             </label>
             <input
               name="title"
               type="text"
               defaultValue={task.title}
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                outline: 'none'
+              }}
               placeholder="Enter task title"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label style={{
+              display: 'block',
+              fontSize: '13px',
+              fontWeight: '500',
+              fontFamily: 'Poppins',
+              color: 'var(--theme-primary-dark)',
+              marginBottom: '8px'
+            }}>
               Description
             </label>
             <textarea
               name="description"
               defaultValue={currentDescription}
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                outline: 'none'
+              }}
               placeholder="Enter task description"
               rows="4"
             />
@@ -326,7 +407,14 @@ export default function EditTaskModal({
 
           {/* Checklist Section */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label style={{
+              display: 'block',
+              fontSize: '13px',
+              fontWeight: '500',
+              fontFamily: 'Poppins',
+              color: 'var(--theme-primary-dark)',
+              marginBottom: '8px'
+            }}>
               Checklist
             </label>
             <div className="border border-slate-300 rounded-lg p-4 bg-slate-50">
@@ -340,13 +428,29 @@ export default function EditTaskModal({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '500',
+                fontFamily: 'Poppins',
+                color: 'var(--theme-primary-dark)',
+                marginBottom: '8px'
+              }}>
                 Plan *
               </label>
               <select
                 value={selectedPlanId}
                 onChange={handlePlanChange}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  fontFamily: 'Poppins',
+                  fontSize: '14px',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
                 required
               >
                 <option value="">Select a plan</option>
@@ -359,13 +463,29 @@ export default function EditTaskModal({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '500',
+                fontFamily: 'Poppins',
+                color: 'var(--theme-primary-dark)',
+                marginBottom: '8px'
+              }}>
                 Bucket
               </label>
               <select
                 value={selectedBucketId}
                 onChange={(e) => setSelectedBucketId(e.target.value)}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  fontFamily: 'Poppins',
+                  fontSize: '14px',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
                 disabled={!selectedPlanId}
               >
                 <option value="">Select a bucket (optional)</option>
@@ -378,13 +498,117 @@ export default function EditTaskModal({
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '500',
+                fontFamily: 'Poppins',
+                color: 'var(--theme-primary-dark)',
+                marginBottom: '8px'
+              }}>
+                Due Date
+              </label>
+              <input
+                name="dueDate"
+                type="date"
+                defaultValue={formatDateForInput(task.dueDateTime)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  fontFamily: 'Poppins',
+                  fontSize: '14px',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '500',
+                fontFamily: 'Poppins',
+                color: 'var(--theme-primary-dark)',
+                marginBottom: '8px'
+              }}>
+                Priority
+              </label>
+              <select
+                name="priority"
+                defaultValue={task.priority || 5}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  fontFamily: 'Poppins',
+                  fontSize: '14px',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="1">Urgent</option>
+                <option value="3">Important</option>
+                <option value="5">Medium</option>
+                <option value="9">Low</option>
+              </select>
+            </div>
+          </div>
+
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label style={{
+              display: 'block',
+              fontSize: '13px',
+              fontWeight: '500',
+              fontFamily: 'Poppins',
+              color: 'var(--theme-primary-dark)',
+              marginBottom: '8px'
+            }}>
+              Status
+            </label>
+            <select
+              name="status"
+              defaultValue={task.percentComplete === 100 ? '100' : task.percentComplete > 0 ? '50' : '0'}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="0">Not Started</option>
+              <option value="50">In Progress</option>
+              <option value="100">Completed</option>
+            </select>
+          </div>
+
+          <div>
+            <label style={{
+              display: 'block',
+              fontSize: '13px',
+              fontWeight: '500',
+              fontFamily: 'Poppins',
+              color: 'var(--theme-primary-dark)',
+              marginBottom: '8px'
+            }}>
               Assign To
             </label>
             <div className="border border-slate-300 rounded-lg p-3 max-h-48 overflow-y-auto">
               {users.length === 0 ? (
-                <p className="text-sm text-slate-500">No users available</p>
+                <p style={{
+                  fontSize: '14px',
+                  fontFamily: 'Poppins',
+                  color: '#64748b'
+                }}>No users available</p>
               ) : (
                 <div className="space-y-2">
                   {users.map(user => (
@@ -396,9 +620,14 @@ export default function EditTaskModal({
                         type="checkbox"
                         checked={!!assignments[user.id]}
                         onChange={() => toggleAssignment(user.id)}
-                        className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                        className="w-4 h-4 border-slate-300 rounded"
+                        style={{ cursor: 'pointer' }}
                       />
-                      <span className="text-sm text-slate-700">
+                      <span style={{
+                        fontSize: '14px',
+                        fontFamily: 'Poppins',
+                        color: 'var(--theme-primary-dark)'
+                      }}>
                         {user.displayName || user.userPrincipalName}
                       </span>
                     </label>
@@ -408,48 +637,47 @@ export default function EditTaskModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Due Date
-              </label>
-              <input
-                name="dueDate"
-                type="date"
-                defaultValue={formatDateForInput(task.dueDateTime)}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Priority
-              </label>
-              <select
-                name="priority"
-                defaultValue={task.priority || 5}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              >
-                <option value="1">Urgent</option>
-                <option value="3">Important</option>
-                <option value="5">Medium</option>
-                <option value="9">Low</option>
-              </select>
-            </div>
-          </div>
-
           <div className="flex gap-3 pt-6">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-6 py-3 border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors font-medium"
+              style={{
+                flex: 1,
+                padding: '12px 24px',
+                border: '1px solid #d1d5db',
+                color: 'var(--theme-primary-dark)',
+                backgroundColor: '#ffffff',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontFamily: 'Poppins',
+                fontWeight: '500',
+                fontSize: '14px',
+                transition: 'background-color 0.2s'
+              }}
+              onMouseOver={(e) => e.target.style.backgroundColor = '#f8fafc'}
+              onMouseOut={(e) => e.target.style.backgroundColor = '#ffffff'}
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading || !taskEtag || !detailsEtag || !isDataLoaded}
-              className="flex-1 px-6 py-3 gradient-primary text-white rounded-xl transition-all font-medium disabled:opacity-50 shadow-md hover:shadow-lg"
+              style={{
+                flex: 1,
+                padding: '12px 24px',
+                backgroundColor: (loading || !taskEtag || !detailsEtag || !isDataLoaded) ? '#94a3b8' : 'var(--theme-primary)',
+                color: 'var(--theme-primary-dark)',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: (loading || !taskEtag || !detailsEtag || !isDataLoaded) ? 'not-allowed' : 'pointer',
+                fontFamily: 'Poppins',
+                fontWeight: '500',
+                fontSize: '14px',
+                boxShadow: '0px 2px 8px rgba(0,0,0,0.15)',
+                transition: 'opacity 0.2s'
+              }}
+              onMouseOver={(e) => !(loading || !taskEtag || !detailsEtag || !isDataLoaded) && (e.target.style.opacity = '0.9')}
+              onMouseOut={(e) => !(loading || !taskEtag || !detailsEtag || !isDataLoaded) && (e.target.style.opacity = '1')}
             >
               {loading ? "Updating..." : !isDataLoaded ? "Loading..." : "Update Task"}
             </button>

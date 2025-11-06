@@ -79,9 +79,13 @@ export default function NewTaskModal({
       // Create task
       const taskData = {
         planId,
-        bucketId,
         title,
       };
+
+      // Only include bucketId if one is selected
+      if (bucketId) {
+        taskData.bucketId = bucketId;
+      }
 
       if (dueDate) {
         // Parse the date as local and set to noon UTC to avoid timezone issues
@@ -135,7 +139,7 @@ export default function NewTaskModal({
           detailsUpdate.checklist = checklist;
         }
 
-        await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${newTask.id}/details`, {
+        const detailsUpdateResponse = await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${newTask.id}/details`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -144,9 +148,14 @@ export default function NewTaskModal({
           },
           body: JSON.stringify(detailsUpdate)
         });
+
+        if (!detailsUpdateResponse.ok) {
+          const errorData = await detailsUpdateResponse.json();
+          throw new Error(errorData.error?.message || 'Failed to update task details');
+        }
       }
 
-      onTaskCreated();
+      onTaskCreated(newTask);
     } catch (err) {
       setError(err.message);
       setLoading(false);
@@ -156,11 +165,34 @@ export default function NewTaskModal({
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b border-slate-200">
+        <div style={{
+          padding: '24px',
+          borderBottom: '2px solid var(--theme-primary)',
+          backgroundColor: 'var(--theme-primary-dark)'
+        }}>
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-semibold text-slate-800">Create New Task</h2>
-            <button type="button" onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
-              <X />
+            <h2 style={{
+              fontSize: '24px',
+              fontWeight: '600',
+              fontFamily: 'Poppins',
+              color: 'var(--theme-primary)',
+              margin: 0
+            }}>Create New Task</h2>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                padding: '8px',
+                backgroundColor: 'var(--theme-primary)',
+                borderRadius: '8px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <X style={{ color: 'var(--theme-primary-dark)' }} />
             </button>
           </div>
         </div>
@@ -174,21 +206,51 @@ export default function NewTaskModal({
           )}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Task Title *</label>
+            <label style={{
+              display: 'block',
+              fontSize: '13px',
+              fontWeight: '500',
+              fontFamily: 'Poppins',
+              color: 'var(--theme-primary-dark)',
+              marginBottom: '8px'
+            }}>Task Title *</label>
             <input
               name="title"
               type="text"
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                outline: 'none'
+              }}
               placeholder="Enter task title"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>
+            <label style={{
+              display: 'block',
+              fontSize: '13px',
+              fontWeight: '500',
+              fontFamily: 'Poppins',
+              color: 'var(--theme-primary-dark)',
+              marginBottom: '8px'
+            }}>Description</label>
             <textarea
               name="description"
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                outline: 'none'
+              }}
               placeholder="Enter task description"
               rows="3"
             />
@@ -196,7 +258,14 @@ export default function NewTaskModal({
 
           {/* Checklist Section */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label style={{
+              display: 'block',
+              fontSize: '13px',
+              fontWeight: '500',
+              fontFamily: 'Poppins',
+              color: 'var(--theme-primary-dark)',
+              marginBottom: '8px'
+            }}>
               Checklist
             </label>
             <div className="border border-slate-300 rounded-lg p-4 bg-slate-50">
@@ -210,12 +279,28 @@ export default function NewTaskModal({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Plan *</label>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '500',
+                fontFamily: 'Poppins',
+                color: 'var(--theme-primary-dark)',
+                marginBottom: '8px'
+              }}>Plan *</label>
               <select
                 name="planId"
                 value={selectedPlanId}
                 onChange={(e) => setSelectedPlanId(e.target.value)}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  fontFamily: 'Poppins',
+                  fontSize: '14px',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
                 required
               >
                 <option value="">Select a plan</option>
@@ -226,10 +311,26 @@ export default function NewTaskModal({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Bucket</label>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '500',
+                fontFamily: 'Poppins',
+                color: 'var(--theme-primary-dark)',
+                marginBottom: '8px'
+              }}>Bucket</label>
               <select
                 name="bucketId"
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  fontFamily: 'Poppins',
+                  fontSize: '14px',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
                 disabled={!selectedPlanId}
               >
                 <option value="">Select a bucket (optional)</option>
@@ -241,10 +342,26 @@ export default function NewTaskModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Assign To</label>
+            <label style={{
+              display: 'block',
+              fontSize: '13px',
+              fontWeight: '500',
+              fontFamily: 'Poppins',
+              color: 'var(--theme-primary-dark)',
+              marginBottom: '8px'
+            }}>Assign To</label>
             <select
               name="assignedTo"
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
               disabled={!selectedPlanId || loadingMembers}
               defaultValue={currentUserId || ""}
             >
@@ -256,25 +373,62 @@ export default function NewTaskModal({
               ))}
             </select>
             {loadingMembers && (
-              <p className="text-xs text-slate-500 mt-1">Loading members...</p>
+              <p style={{
+                fontSize: '12px',
+                color: '#64748b',
+                fontFamily: 'Poppins',
+                marginTop: '4px'
+              }}>Loading members...</p>
             )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Due Date</label>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '500',
+                fontFamily: 'Poppins',
+                color: 'var(--theme-primary-dark)',
+                marginBottom: '8px'
+              }}>Due Date</label>
               <input
                 name="dueDate"
                 type="date"
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  fontFamily: 'Poppins',
+                  fontSize: '14px',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Priority</label>
+              <label style={{
+                display: 'block',
+                fontSize: '13px',
+                fontWeight: '500',
+                fontFamily: 'Poppins',
+                color: 'var(--theme-primary-dark)',
+                marginBottom: '8px'
+              }}>Priority</label>
               <select
                 name="priority"
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  fontFamily: 'Poppins',
+                  fontSize: '14px',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
                 defaultValue="5"
               >
                 <option value="1">Urgent</option>
@@ -289,14 +443,43 @@ export default function NewTaskModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-6 py-3 border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors font-medium"
+              style={{
+                flex: 1,
+                padding: '12px 24px',
+                border: '1px solid #d1d5db',
+                color: 'var(--theme-primary-dark)',
+                backgroundColor: '#ffffff',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontFamily: 'Poppins',
+                fontWeight: '500',
+                fontSize: '14px',
+                transition: 'background-color 0.2s'
+              }}
+              onMouseOver={(e) => e.target.style.backgroundColor = '#f8fafc'}
+              onMouseOut={(e) => e.target.style.backgroundColor = '#ffffff'}
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 px-6 py-3 gradient-primary text-white rounded-xl transition-all font-medium disabled:opacity-50 shadow-md hover:shadow-lg"
+              style={{
+                flex: 1,
+                padding: '12px 24px',
+                backgroundColor: loading ? '#94a3b8' : 'var(--theme-primary)',
+                color: 'var(--theme-primary-dark)',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                fontFamily: 'Poppins',
+                fontWeight: '500',
+                fontSize: '14px',
+                boxShadow: '0px 2px 8px rgba(0,0,0,0.15)',
+                transition: 'opacity 0.2s'
+              }}
+              onMouseOver={(e) => !loading && (e.target.style.opacity = '0.9')}
+              onMouseOut={(e) => !loading && (e.target.style.opacity = '1')}
             >
               {loading ? "Creating..." : "Create Task"}
             </button>

@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from "react";
-import { Slack, Link, Unlink, Bell, AlertCircle, Check } from "../../components/ui/icons";
+import React, { useState, useEffect, useRef } from "react";
+import { Slack, Link, Unlink, Bell, AlertCircle, Check, ChevronDown } from "../../components/ui/icons";
+import { useTheme } from "../../contexts/ThemeContext";
+import { themes } from "../../constants/themes";
 
 export default function Settings({ accessToken, user }) {
   const [slackConnection, setSlackConnection] = useState(null);
@@ -9,8 +11,31 @@ export default function Settings({ accessToken, user }) {
   const [preferences, setPreferences] = useState(null);
   const [savingPreferences, setSavingPreferences] = useState(false);
 
+  // Theme selection from context
+  const { currentThemeId, setTheme, theme } = useTheme();
+  const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
+  const themeDropdownRef = useRef(null);
+
+  // Default Plan Selection states
+  const [availablePlans, setAvailablePlans] = useState([]);
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [selectedBucket, setSelectedBucket] = useState(null);
+  const [plansLoading, setPlansLoading] = useState(false);
+
   // Backend URL - use environment variable or default
   const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:7071';
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (themeDropdownRef.current && !themeDropdownRef.current.contains(event.target)) {
+        setThemeDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Check Slack connection status on mount
   useEffect(() => {
@@ -194,29 +219,534 @@ export default function Settings({ accessToken, user }) {
     handleUpdatePreferences(updated);
   };
 
+  const fetchAvailablePlans = async () => {
+    try {
+      setPlansLoading(true);
+      const response = await fetch(`${backendUrl}/api/slack/plans`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'ngrok-skip-browser-warning': 'true'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAvailablePlans(data.plans || []);
+
+        // Set current selection from preferences
+        if (preferences?.defaultPlanId) {
+          setSelectedPlan(preferences.defaultPlanId);
+          setSelectedBucket(preferences.defaultBucketId);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching plans:', err);
+      setError('Failed to load available plans. Please try again.');
+      setTimeout(() => setError(null), 3000);
+    } finally {
+      setPlansLoading(false);
+    }
+  };
+
+  const handleSaveDefaultPlan = async () => {
+    try {
+      const planData = availablePlans.find(p => p.planId === selectedPlan);
+      const bucketData = planData?.buckets.find(b => b.bucketId === selectedBucket);
+
+      await handleUpdatePreferences({
+        defaultPlanId: selectedPlan,
+        defaultBucketId: selectedBucket,
+        defaultPlanName: planData?.planName || null,
+        defaultBucketName: bucketData?.bucketName || null
+      });
+
+      setSuccess('Default plan saved successfully!');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      console.error('Error saving default plan:', err);
+      setError('Failed to save default plan');
+      setTimeout(() => setError(null), 3000);
+    }
+  };
+
+  // Fetch available plans when Slack is connected
+  useEffect(() => {
+    if (slackConnection?.connected && preferences) {
+      fetchAvailablePlans();
+    }
+  }, [slackConnection?.connected, preferences?.defaultPlanId]);
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto" style={{ paddingTop: '24px' }}>
       {/* Success/Error Messages */}
       {success && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3 mb-6">
           <Check className="text-green-600 flex-shrink-0 mt-0.5" size={18} />
           <p className="text-green-800 text-sm">{success}</p>
         </div>
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3 mb-6">
           <AlertCircle className="text-red-600 flex-shrink-0 mt-0.5" />
           <p className="text-red-800 text-sm">{error}</p>
         </div>
       )}
 
+      {/* 2-Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column - Profile */}
+        <div className="lg:col-span-1">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+            <h2 style={{
+              fontSize: '24px',
+              fontWeight: '600',
+              fontFamily: 'Poppins',
+              color: 'var(--theme-primary-dark)',
+              marginBottom: '24px'
+            }}>Profile</h2>
+
+            {/* Profile Photo */}
+            <div className="flex flex-col items-center mb-6">
+              {user?.photo ? (
+                <div style={{
+                  width: '120px',
+                  height: '120px',
+                  borderRadius: '100%',
+                  backgroundImage: `url(${user.photo})`,
+                  backgroundPosition: 'center',
+                  backgroundSize: 'cover',
+                  marginBottom: '16px'
+                }} />
+              ) : (
+                <div style={{
+                  width: '120px',
+                  height: '120px',
+                  borderRadius: '100%',
+                  backgroundColor: 'var(--theme-primary-dark)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '16px'
+                }}>
+                  <span style={{
+                    fontSize: '48px',
+                    fontWeight: '600',
+                    fontFamily: 'Poppins',
+                    color: 'var(--theme-primary)'
+                  }}>
+                    {user?.displayName?.charAt(0) || user?.mail?.charAt(0) || 'U'}
+                  </span>
+                </div>
+              )}
+
+              <button style={{
+                padding: '8px 16px',
+                backgroundColor: 'var(--theme-primary)',
+                color: 'var(--theme-primary-dark)',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontFamily: 'Poppins',
+                fontWeight: '500',
+                fontSize: '14px',
+                boxShadow: '0px 2px 8px rgba(0,0,0,0.15)',
+                transition: 'opacity 0.2s'
+              }}
+              onMouseOver={(e) => e.target.style.opacity = '0.9'}
+              onMouseOut={(e) => e.target.style.opacity = '1'}>
+                Upload Photo
+              </button>
+            </div>
+
+            {/* User Info */}
+            <div className="space-y-4">
+              <div>
+                <label style={{
+                  display: 'block',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  fontFamily: 'Poppins',
+                  color: '#64748b',
+                  marginBottom: '4px'
+                }}>Name</label>
+                <p style={{
+                  fontSize: '14px',
+                  fontFamily: 'Poppins',
+                  color: 'var(--theme-primary-dark)',
+                  fontWeight: '500'
+                }}>{user?.displayName || 'Not set'}</p>
+              </div>
+
+              <div>
+                <label style={{
+                  display: 'block',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  fontFamily: 'Poppins',
+                  color: '#64748b',
+                  marginBottom: '4px'
+                }}>Email</label>
+                <p style={{
+                  fontSize: '14px',
+                  fontFamily: 'Poppins',
+                  color: 'var(--theme-primary-dark)',
+                  fontWeight: '500'
+                }}>{user?.mail || user?.userPrincipalName || 'Not set'}</p>
+              </div>
+
+              <div>
+                <label style={{
+                  display: 'block',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  fontFamily: 'Poppins',
+                  color: '#64748b',
+                  marginBottom: '4px'
+                }}>Job Title</label>
+                <p style={{
+                  fontSize: '14px',
+                  fontFamily: 'Poppins',
+                  color: 'var(--theme-primary-dark)',
+                  fontWeight: '500'
+                }}>{user?.jobTitle || 'Not set'}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Default Plan for Quick Add - Only show when connected */}
+          {slackConnection?.connected && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 mt-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--theme-primary-dark)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <svg className="w-6 h-6" fill="none" stroke="var(--theme-primary)" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 style={{
+                    fontSize: '18px',
+                    fontWeight: '600',
+                    fontFamily: 'Poppins',
+                    color: 'var(--theme-primary-dark)',
+                    margin: 0
+                  }}>Default Plan</h2>
+                  <p style={{
+                    fontSize: '12px',
+                    fontFamily: 'Poppins',
+                    color: '#64748b',
+                    margin: '4px 0 0 0'
+                  }}>
+                    For <code className="px-1.5 py-0.5 bg-slate-100 rounded text-xs">/taskcommand add</code>
+                  </p>
+                </div>
+              </div>
+
+              {plansLoading ? (
+                <div className="text-center py-8">
+                  <div
+                    className="inline-block animate-spin rounded-full"
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      border: '4px solid #e5e7eb',
+                      borderTopColor: 'var(--theme-primary)'
+                    }}
+                  />
+                  <p style={{
+                    marginTop: '8px',
+                    fontSize: '14px',
+                    fontFamily: 'Poppins',
+                    color: '#64748b'
+                  }}>Loading your plans...</p>
+                </div>
+              ) : availablePlans.length === 0 ? (
+                <div className="text-center py-8 text-slate-600">
+                  <p>No Planner plans found with buckets.</p>
+                  <p className="text-sm mt-2">Create a plan in Microsoft Planner or Teams first.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Plan Selector */}
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      fontFamily: 'Poppins',
+                      color: 'var(--theme-primary-dark)',
+                      marginBottom: '8px'
+                    }}>
+                      Plan
+                    </label>
+                    <select
+                      value={selectedPlan || ''}
+                      onChange={(e) => {
+                        setSelectedPlan(e.target.value);
+                        setSelectedBucket(null); // Reset bucket when plan changes
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        fontFamily: 'Poppins',
+                        fontSize: '14px',
+                        outline: 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <option value="">Select a plan...</option>
+                      {availablePlans.map(plan => (
+                        <option key={plan.planId} value={plan.planId}>
+                          {plan.planName} ({plan.groupName})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Bucket Selector - Only show when plan is selected */}
+                  {selectedPlan && (
+                    <div>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '13px',
+                        fontWeight: '500',
+                        fontFamily: 'Poppins',
+                        color: 'var(--theme-primary-dark)',
+                        marginBottom: '8px'
+                      }}>
+                        Bucket
+                      </label>
+                      <select
+                        value={selectedBucket || ''}
+                        onChange={(e) => setSelectedBucket(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '8px',
+                          fontFamily: 'Poppins',
+                          fontSize: '14px',
+                          outline: 'none',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <option value="">Select a bucket...</option>
+                        {availablePlans
+                          .find(p => p.planId === selectedPlan)
+                          ?.buckets.map(bucket => (
+                            <option key={bucket.bucketId} value={bucket.bucketId}>
+                              {bucket.bucketName}
+                            </option>
+                          ))
+                        }
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Save Button */}
+                  {selectedPlan && selectedBucket && (
+                    <button
+                      onClick={handleSaveDefaultPlan}
+                      disabled={savingPreferences}
+                      style={{
+                        width: '100%',
+                        padding: '8px 16px',
+                        backgroundColor: savingPreferences ? '#94a3b8' : 'var(--theme-primary)',
+                        color: 'var(--theme-primary-dark)',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: savingPreferences ? 'not-allowed' : 'pointer',
+                        fontFamily: 'Poppins',
+                        fontWeight: '500',
+                        fontSize: '14px',
+                        boxShadow: '0px 2px 8px rgba(0,0,0,0.15)',
+                        transition: 'opacity 0.2s'
+                      }}
+                      onMouseOver={(e) => !savingPreferences && (e.target.style.opacity = '0.9')}
+                      onMouseOut={(e) => !savingPreferences && (e.target.style.opacity = '1')}
+                    >
+                      {savingPreferences ? 'Saving...' : 'Save Default Plan'}
+                    </button>
+                  )}
+
+                  {/* Current Selection Display */}
+                  {preferences?.defaultPlanName && (
+                    <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                      <p style={{
+                        fontSize: '13px',
+                        fontWeight: '500',
+                        fontFamily: 'Poppins',
+                        color: '#166534'
+                      }}>
+                        ✓ Current default: {preferences.defaultPlanName} → {preferences.defaultBucketName}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Right Column - Settings */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Theme Selection Section */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+        <div className="flex items-start justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '8px',
+              backgroundColor: 'var(--theme-primary-dark)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <svg className="w-6 h-6" fill="none" stroke="var(--theme-primary)" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+              </svg>
+            </div>
+            <div>
+              <h2 style={{
+                fontSize: '24px',
+                fontWeight: '600',
+                fontFamily: 'Poppins',
+                color: 'var(--theme-primary-dark)',
+                margin: 0
+              }}>Theme</h2>
+              <p style={{
+                fontSize: '14px',
+                fontFamily: 'Poppins',
+                color: '#64748b',
+                margin: '4px 0 0 0'
+              }}>Customize the appearance of your TaskCommand</p>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label style={{
+            display: 'block',
+            fontSize: '13px',
+            fontWeight: '500',
+            fontFamily: 'Poppins',
+            color: 'var(--theme-primary-dark)',
+            marginBottom: '8px'
+          }}>Color Scheme</label>
+          <div ref={themeDropdownRef} style={{ position: 'relative', width: '100%', maxWidth: '400px' }}>
+            <button
+              type="button"
+              onClick={() => setThemeDropdownOpen(!themeDropdownOpen)}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                outline: 'none',
+                cursor: 'pointer',
+                backgroundColor: '#ffffff',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                color: theme.colors.primaryDark,
+              }}
+            >
+              <span>{themes[currentThemeId]?.name || 'Select Theme'}</span>
+              <ChevronDown style={{
+                transition: 'transform 0.2s',
+                transform: themeDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'
+              }} />
+            </button>
+
+            {themeDropdownOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  marginTop: '4px',
+                  backgroundColor: '#ffffff',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                  zIndex: 1000,
+                  overflow: 'hidden',
+                }}
+              >
+                {Object.values(themes).map((themeOption) => (
+                  <button
+                    key={themeOption.id}
+                    type="button"
+                    onClick={() => {
+                      setTheme(themeOption.id);
+                      setThemeDropdownOpen(false);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: 'none',
+                      backgroundColor: currentThemeId === themeOption.id ? theme.colors.primaryLight : '#ffffff',
+                      fontFamily: 'Poppins',
+                      fontSize: '14px',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      color: theme.colors.primaryDark,
+                      transition: 'background-color 0.15s',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (currentThemeId !== themeOption.id) {
+                        e.target.style.backgroundColor = '#f8fafc';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (currentThemeId !== themeOption.id) {
+                        e.target.style.backgroundColor = '#ffffff';
+                      }
+                    }}
+                  >
+                    {themeOption.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <p style={{
+            fontSize: '12px',
+            fontFamily: 'Poppins',
+            color: '#64748b',
+            marginTop: '8px'
+          }}>Select a color scheme for the application</p>
+        </div>
+      </div>
+
       {/* Slack Integration Section */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
         <div className="flex items-start justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-              <Slack size={24} className="text-white" />
+            <div style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '8px',
+              backgroundColor: 'var(--theme-primary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <Slack size={24} style={{ color: 'var(--theme-primary-dark)' }} />
             </div>
             <div>
               <h2 className="text-2xl font-bold text-slate-800">Slack Integration</h2>
@@ -309,7 +839,17 @@ export default function Settings({ accessToken, user }) {
       {slackConnection?.connected && preferences && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
           <div className="flex items-center gap-3 mb-6">
-            <Bell size={20} className="text-slate-600" />
+            <div style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '8px',
+              backgroundColor: 'var(--theme-primary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <Bell size={20} style={{ color: 'var(--theme-primary-dark)' }} />
+            </div>
             <h3 className="text-xl font-bold text-slate-800">Notification Preferences</h3>
           </div>
 
@@ -323,14 +863,29 @@ export default function Settings({ accessToken, user }) {
               <button
                 onClick={() => togglePreference('assignmentNotifications')}
                 disabled={savingPreferences}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  preferences.assignmentNotifications ? 'bg-indigo-600' : 'bg-slate-300'
-                }`}
+                style={{
+                  position: 'relative',
+                  display: 'inline-flex',
+                  height: '24px',
+                  width: '44px',
+                  alignItems: 'center',
+                  borderRadius: '9999px',
+                  transition: 'background-color 0.2s',
+                  backgroundColor: preferences.assignmentNotifications ? 'var(--theme-primary)' : '#cbd5e1',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
               >
                 <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    preferences.assignmentNotifications ? 'translate-x-6' : 'translate-x-1'
-                  }`}
+                  style={{
+                    display: 'inline-block',
+                    height: '16px',
+                    width: '16px',
+                    borderRadius: '9999px',
+                    backgroundColor: preferences.assignmentNotifications ? 'var(--theme-primary-dark)' : '#ffffff',
+                    transform: preferences.assignmentNotifications ? 'translateX(24px)' : 'translateX(4px)',
+                    transition: 'transform 0.2s'
+                  }}
                 />
               </button>
             </div>
@@ -345,14 +900,29 @@ export default function Settings({ accessToken, user }) {
                 <button
                   onClick={() => togglePreference('morningDigestEnabled')}
                   disabled={savingPreferences}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    preferences.morningDigestEnabled ? 'bg-indigo-600' : 'bg-slate-300'
-                  }`}
+                  style={{
+                    position: 'relative',
+                    display: 'inline-flex',
+                    height: '24px',
+                    width: '44px',
+                    alignItems: 'center',
+                    borderRadius: '9999px',
+                    transition: 'background-color 0.2s',
+                    backgroundColor: preferences.morningDigestEnabled ? 'var(--theme-primary)' : '#cbd5e1',
+                    border: 'none',
+                    cursor: 'pointer'
+                  }}
                 >
                   <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      preferences.morningDigestEnabled ? 'translate-x-6' : 'translate-x-1'
-                    }`}
+                    style={{
+                      display: 'inline-block',
+                      height: '16px',
+                      width: '16px',
+                      borderRadius: '9999px',
+                      backgroundColor: preferences.morningDigestEnabled ? 'var(--theme-primary-dark)' : '#ffffff',
+                      transform: preferences.morningDigestEnabled ? 'translateX(24px)' : 'translateX(4px)',
+                      transition: 'transform 0.2s'
+                    }}
                   />
                 </button>
               </div>
@@ -382,14 +952,29 @@ export default function Settings({ accessToken, user }) {
                 <button
                   onClick={() => togglePreference('dailyKudosEnabled')}
                   disabled={savingPreferences}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    preferences.dailyKudosEnabled ? 'bg-indigo-600' : 'bg-slate-300'
-                  }`}
+                  style={{
+                    position: 'relative',
+                    display: 'inline-flex',
+                    height: '24px',
+                    width: '44px',
+                    alignItems: 'center',
+                    borderRadius: '9999px',
+                    transition: 'background-color 0.2s',
+                    backgroundColor: preferences.dailyKudosEnabled ? 'var(--theme-primary)' : '#cbd5e1',
+                    border: 'none',
+                    cursor: 'pointer'
+                  }}
                 >
                   <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      preferences.dailyKudosEnabled ? 'translate-x-6' : 'translate-x-1'
-                    }`}
+                    style={{
+                      display: 'inline-block',
+                      height: '16px',
+                      width: '16px',
+                      borderRadius: '9999px',
+                      backgroundColor: preferences.dailyKudosEnabled ? 'var(--theme-primary-dark)' : '#ffffff',
+                      transform: preferences.dailyKudosEnabled ? 'translateX(24px)' : 'translateX(4px)',
+                      transition: 'transform 0.2s'
+                    }}
                   />
                 </button>
               </div>
@@ -419,14 +1004,29 @@ export default function Settings({ accessToken, user }) {
                 <button
                   onClick={() => togglePreference('weeklyDigestEnabled')}
                   disabled={savingPreferences}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    preferences.weeklyDigestEnabled ? 'bg-indigo-600' : 'bg-slate-300'
-                  }`}
+                  style={{
+                    position: 'relative',
+                    display: 'inline-flex',
+                    height: '24px',
+                    width: '44px',
+                    alignItems: 'center',
+                    borderRadius: '9999px',
+                    transition: 'background-color 0.2s',
+                    backgroundColor: preferences.weeklyDigestEnabled ? 'var(--theme-primary)' : '#cbd5e1',
+                    border: 'none',
+                    cursor: 'pointer'
+                  }}
                 >
                   <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      preferences.weeklyDigestEnabled ? 'translate-x-6' : 'translate-x-1'
-                    }`}
+                    style={{
+                      display: 'inline-block',
+                      height: '16px',
+                      width: '16px',
+                      borderRadius: '9999px',
+                      backgroundColor: preferences.weeklyDigestEnabled ? 'var(--theme-primary-dark)' : '#ffffff',
+                      transform: preferences.weeklyDigestEnabled ? 'translateX(24px)' : 'translateX(4px)',
+                      transition: 'transform 0.2s'
+                    }}
                   />
                 </button>
               </div>
@@ -472,14 +1072,29 @@ export default function Settings({ accessToken, user }) {
               <button
                 onClick={() => togglePreference('milestonesEnabled')}
                 disabled={savingPreferences}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  preferences.milestonesEnabled ? 'bg-indigo-600' : 'bg-slate-300'
-                }`}
+                style={{
+                  position: 'relative',
+                  display: 'inline-flex',
+                  height: '24px',
+                  width: '44px',
+                  alignItems: 'center',
+                  borderRadius: '9999px',
+                  transition: 'background-color 0.2s',
+                  backgroundColor: preferences.milestonesEnabled ? 'var(--theme-primary)' : '#cbd5e1',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
               >
                 <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    preferences.milestonesEnabled ? 'translate-x-6' : 'translate-x-1'
-                  }`}
+                  style={{
+                    display: 'inline-block',
+                    height: '16px',
+                    width: '16px',
+                    borderRadius: '9999px',
+                    backgroundColor: preferences.milestonesEnabled ? 'var(--theme-primary-dark)' : '#ffffff',
+                    transform: preferences.milestonesEnabled ? 'translateX(24px)' : 'translateX(4px)',
+                    transition: 'transform 0.2s'
+                  }}
                 />
               </button>
             </div>
@@ -493,14 +1108,29 @@ export default function Settings({ accessToken, user }) {
               <button
                 onClick={() => togglePreference('handoffNotifications')}
                 disabled={savingPreferences}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  preferences.handoffNotifications ? 'bg-indigo-600' : 'bg-slate-300'
-                }`}
+                style={{
+                  position: 'relative',
+                  display: 'inline-flex',
+                  height: '24px',
+                  width: '44px',
+                  alignItems: 'center',
+                  borderRadius: '9999px',
+                  transition: 'background-color 0.2s',
+                  backgroundColor: preferences.handoffNotifications ? 'var(--theme-primary)' : '#cbd5e1',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
               >
                 <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    preferences.handoffNotifications ? 'translate-x-6' : 'translate-x-1'
-                  }`}
+                  style={{
+                    display: 'inline-block',
+                    height: '16px',
+                    width: '16px',
+                    borderRadius: '9999px',
+                    backgroundColor: preferences.handoffNotifications ? 'var(--theme-primary-dark)' : '#ffffff',
+                    transform: preferences.handoffNotifications ? 'translateX(24px)' : 'translateX(4px)',
+                    transition: 'transform 0.2s'
+                  }}
                 />
               </button>
             </div>
@@ -546,6 +1176,10 @@ export default function Settings({ accessToken, user }) {
           )}
         </div>
       )}
+        </div>
+        {/* End Right Column */}
+      </div>
+      {/* End 2-Column Grid */}
     </div>
   );
 }

@@ -127,7 +127,71 @@ async function getAllCompanyTasks() {
   }
 }
 
+/**
+ * Get all tasks assigned to a specific user
+ * @param {string} userId - Azure AD user ID
+ * @returns {Promise<Array>} Array of tasks assigned to the user
+ */
+async function getUserTasks(userId) {
+  const client = getGraphClient();
+
+  try {
+    // Get all tasks assigned to the user
+    const response = await client
+      .api(`/users/${userId}/planner/tasks`)
+      .get();
+
+    return response.value || [];
+  } catch (error) {
+    console.error(`Error fetching tasks for user ${userId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Get details for a specific plan
+ * @param {string} planId - Planner plan ID
+ * @returns {Promise<object>} Plan details
+ */
+async function getPlan(planId) {
+  const client = getGraphClient();
+
+  try {
+    const plan = await client
+      .api(`/planner/plans/${planId}`)
+      .get();
+
+    return plan;
+  } catch (error) {
+    console.error(`Error fetching plan ${planId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Get details for a specific bucket
+ * @param {string} bucketId - Planner bucket ID
+ * @returns {Promise<object>} Bucket details
+ */
+async function getBucket(bucketId) {
+  const client = getGraphClient();
+
+  try {
+    const bucket = await client
+      .api(`/planner/buckets/${bucketId}`)
+      .get();
+
+    return bucket;
+  } catch (error) {
+    console.error(`Error fetching bucket ${bucketId}:`, error);
+    throw error;
+  }
+}
+
 module.exports = {
   getGraphClient,
-  getAllCompanyTasks
+  getAllCompanyTasks,
+  getUserTasks,
+  getPlan,
+  getBucket
 };

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
+import { graphRequest, patchPlannerTask, patchPlannerTaskDetails } from "../../services/plannerApi";
 import { X, AlertCircle } from "../ui/icons";
 import ChecklistEditor from "./ChecklistEditor";
 import CustomDropdown from "../ui/CustomDropdown";
@@ -60,11 +61,7 @@ export default function EditTaskModal({
     const fetchTaskData = async () => {
       try {
         // Fetch task to get its etag
-        const taskResponse = await fetch(
-          `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}`,
-          { headers: { 'Authorization': `Bearer ${accessToken}` } }
-        );
-        const taskData = await taskResponse.json();
+        const taskData = await graphRequest(accessToken, `/planner/tasks/${task.id}`);
         setTaskEtag(taskData['@odata.etag']);
         setAssignments(taskData.assignments || {});
 
@@ -77,11 +74,7 @@ export default function EditTaskModal({
         }
 
         // Fetch task details to get its etag and description
-        const detailsResponse = await fetch(
-          `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`,
-          { headers: { 'Authorization': `Bearer ${accessToken}` } }
-        );
-        const detailsData = await detailsResponse.json();
+        const detailsData = await graphRequest(accessToken, `/planner/tasks/${task.id}/details`);
         setDetailsEtag(detailsData['@odata.etag']);
         const desc = detailsData.description || '';
         const checklistData = detailsData.checklist || {};
@@ -92,17 +85,8 @@ export default function EditTaskModal({
 
         // Fetch group members for assignment
         if (taskData.planId) {
-          const planResponse = await fetch(
-            `https://graph.microsoft.com/v1.0/planner/plans/${taskData.planId}`,
-            { headers: { 'Authorization': `Bearer ${accessToken}` } }
-          );
-          const planData = await planResponse.json();
-
-          const membersResponse = await fetch(
-            `https://graph.microsoft.com/v1.0/groups/${planData.owner}/members`,
-            { headers: { 'Authorization': `Bearer ${accessToken}` } }
-          );
-          const membersData = await membersResponse.json();
+          const planData = await graphRequest(accessToken, `/planner/plans/${taskData.planId}`);
+          const membersData = await graphRequest(accessToken, `/groups/${planData.owner}/members`);
           setUsers(membersData.value || []);
         }
       } catch (err) {
@@ -203,23 +187,8 @@ export default function EditTaskModal({
         updateData.dueDateTime = null; // Clear due date if empty
       }
 
-      const taskResponse = await fetch(
-        `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-            'If-Match': taskEtag
-          },
-          body: JSON.stringify(updateData)
-        }
-      );
-
-      if (!taskResponse.ok) {
-        const errorData = await taskResponse.json();
-        throw new Error(errorData.error?.message || 'Failed to update task');
-      }
+      // patchPlannerTask fetches a fresh etag and retries once on a 412 conflict
+      await patchPlannerTask(accessToken, task.id, updateData);
 
       // Update description and/or checklist if changed
       const descriptionChanged = description !== originalDescription;
@@ -234,31 +203,7 @@ export default function EditTaskModal({
           detailsUpdate.checklist = checklist;
         }
 
-        // Fetch fresh etag before updating details
-        const freshDetailsResponse = await fetch(
-          `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`,
-          { headers: { 'Authorization': `Bearer ${accessToken}` } }
-        );
-        const freshDetailsData = await freshDetailsResponse.json();
-        const freshDetailsEtag = freshDetailsData['@odata.etag'];
-
-        const detailsResponse = await fetch(
-          `https://graph.microsoft.com/v1.0/planner/tasks/${task.id}/details`,
-          {
-            method: 'PATCH',
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-              'If-Match': freshDetailsEtag
-            },
-            body: JSON.stringify(detailsUpdate)
-          }
-        );
-
-        if (!detailsResponse.ok) {
-          const errorData = await detailsResponse.json();
-          throw new Error(errorData.error?.message || 'Failed to update task details');
-        }
+        await patchPlannerTaskDetails(accessToken, task.id, detailsUpdate);
       }
 
       // Construct the updated task object to pass back for optimistic update
@@ -293,39 +238,6 @@ export default function EditTaskModal({
     if (!dateString) return '';
     const date = new Date(dateString);
     return date.toISOString().split('T')[0];
-  };
-
-  // Handle plan change
-  const handlePlanChange = async (e) => {
-    const planId = e.target.value;
-    setSelectedPlanId(planId);
-    // Reset bucket when plan changes
-    setSelectedBucketId('');
-    // Clear assignments when plan changes (users from old plan won't be in new plan)
-    setAssignments({});
-
-    // Fetch users for the new plan
-    if (planId && accessToken) {
-      try {
-        const planResponse = await fetch(
-          `https://graph.microsoft.com/v1.0/planner/plans/${planId}`,
-          { headers: { 'Authorization': `Bearer ${accessToken}` } }
-        );
-        const planData = await planResponse.json();
-
-        const membersResponse = await fetch(
-          `https://graph.microsoft.com/v1.0/groups/${planData.owner}/members`,
-          { headers: { 'Authorization': `Bearer ${accessToken}` } }
-        );
-        const membersData = await membersResponse.json();
-        setUsers(membersData.value || []);
-      } catch (err) {
-        console.error('Error fetching users for new plan:', err);
-        setUsers([]);
-      }
-    } else {
-      setUsers([]);
-    }
   };
 
   // Handle assignment toggle
@@ -514,17 +426,8 @@ export default function EditTaskModal({
                   // Fetch users for the new plan
                   if (value && accessToken) {
                     try {
-                      const planResponse = await fetch(
-                        `https://graph.microsoft.com/v1.0/planner/plans/${value}`,
-                        { headers: { 'Authorization': `Bearer ${accessToken}` } }
-                      );
-                      const planData = await planResponse.json();
-
-                      const membersResponse = await fetch(
-                        `https://graph.microsoft.com/v1.0/groups/${planData.owner}/members`,
-                        { headers: { 'Authorization': `Bearer ${accessToken}` } }
-                      );
-                      const membersData = await membersResponse.json();
+                      const planData = await graphRequest(accessToken, `/planner/plans/${value}`);
+                      const membersData = await graphRequest(accessToken, `/groups/${planData.owner}/members`);
                       setUsers(membersData.value || []);
                     } catch (err) {
                       console.error('Error fetching users for new plan:', err);

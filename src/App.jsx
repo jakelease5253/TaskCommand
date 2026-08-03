@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { useTasks } from './hooks/useTasks';
 import { useTimer } from './hooks/useTimer';
+import { graphRequest, patchPlannerTask, forEachTask } from './services/plannerApi';
 
 // Component imports
 import LoginScreen from './components/auth/LoginScreen';
@@ -13,7 +14,6 @@ import PlanningView from './features/planning/PlanningView';
 import Insights from './features/insights/Insights';
 import Settings from './features/settings/Settings';
 import FocusTaskCard from './components/focus/FocusTaskCard';
-import FilterBar from './components/tasks/FilterBar';
 import PriorityQueue from './components/tasks/PriorityQueue';
 import TaskSearch from './components/tasks/TaskSearch';
 import BulkActionsBar from './components/tasks/BulkActionsBar';
@@ -54,10 +54,6 @@ function App() {
   const [showMetrics, setShowMetrics] = useState(true); // For collapsible metrics on personal view
   const [focusMode, setFocusMode] = useState(false); // Immersive focus mode
   const [focusModeTransitioning, setFocusModeTransitioning] = useState(false); // Transition state
-  const [allTasksCollapsed, setAllTasksCollapsed] = useState(() => {
-    const saved = localStorage.getItem('taskcommand_all_tasks_collapsed');
-    return saved === 'true';
-  });
   const [showPriorityLimitModal, setShowPriorityLimitModal] = useState(false);
   const [showGoalSettingsModal, setShowGoalSettingsModal] = useState(false);
   const [showBulkAssigneeModal, setShowBulkAssigneeModal] = useState(false);
@@ -74,37 +70,10 @@ function App() {
   // Priority Queue (max 7 tasks)
   const [priorityQueue, setPriorityQueue] = useState([]);
 
-  // Filtering and sorting
-  const [sortBy, setSortBy] = useState(() => {
-    const saved = localStorage.getItem('taskSortBy');
-    return saved || 'dueDate';
-  });
-  const [filters, setFilters] = useState(() => {
-    const saved = localStorage.getItem('taskFilters');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (err) {
-        console.error('Error loading filters:', err);
-      }
-    }
-    return {
-      priority: '',
-      planId: '',
-      dateRange: '',
-      customStartDate: '',
-      customEndDate: ''
-    };
-  });
-
-  // Pagination for All Tasks
-  const [currentPage, setCurrentPage] = useState(1);
-  const tasksPerPage = 10;
   const [draggedTask, setDraggedTask] = useState(null);
   const [dragSource, setDragSource] = useState(null); // 'all' or 'priority'
 
   // Dashboard
-  const [dateRange, setDateRange] = useState('7days');
   const [completedTasksHistory, setCompletedTasksHistory] = useState([]);
 
   // Work hours for each day of the week
@@ -180,11 +149,6 @@ function App() {
     localStorage.setItem('taskcommand_current_view', currentView);
   }, [currentView]);
 
-  // Save all tasks collapsed state to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem('taskcommand_all_tasks_collapsed', allTasksCollapsed.toString());
-  }, [allTasksCollapsed]);
-
   // Save work hours to localStorage
   useEffect(() => {
     localStorage.setItem('taskcommand_work_hours', JSON.stringify(workHours));
@@ -215,7 +179,7 @@ function App() {
         [focusTask.id]: focusTimer.elapsed
       }));
     }
-  }, [focusTimer.elapsed, focusTask]);
+  }, [focusTimer.elapsed, focusTimer.isRunning, focusTask]);
 
   // Load completed tasks history from localStorage
   useEffect(() => {
@@ -228,21 +192,6 @@ function App() {
       }
     }
   }, []);
-
-  // Save filters to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem('taskFilters', JSON.stringify(filters));
-  }, [filters]);
-
-  // Save sortBy to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem('taskSortBy', sortBy);
-  }, [sortBy]);
-
-  // Reset to page 1 when filters or sorting changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filters, sortBy]);
 
   // Load priority queue from localStorage
   const [priorityQueueLoaded, setPriorityQueueLoaded] = useState(false);
@@ -300,6 +249,8 @@ function App() {
         console.error('Error loading focus task:', err);
       }
     }
+    // Restore-once on mount; focusTimer is a new object every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Save focus task to localStorage whenever it changes
@@ -372,6 +323,8 @@ function App() {
       auth.fetchUserProfile();
       taskManager.fetchAllTasks();
     }
+    // Initial fetch, guarded by hasFetchedData; auth/taskManager are new objects every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.isAuthenticated, auth.accessToken]);
 
   // Helper functions
@@ -386,130 +339,6 @@ function App() {
     const planBuckets = taskManager.buckets[task.planId] || [];
     const bucket = planBuckets.find(b => b.id === task.bucketId);
     return bucket ? bucket.name : 'No Bucket';
-  };
-
-  const getPriorityLabel = (priority) => {
-    const labels = {1: 'Urgent', 3: 'Important', 5: 'Medium', 9: 'Low'};
-    return labels[priority] || 'Medium';
-  };
-
-  const getPriorityColor = (priority) => {
-    const colors = {
-      1: 'bg-red-100 text-red-700',
-      3: 'bg-orange-100 text-orange-700',
-      5: 'bg-blue-100 text-blue-700',
-      9: 'bg-slate-100 text-slate-700'
-    };
-    return colors[priority] || 'bg-blue-100 text-blue-700';
-  };
-
-  const isOverdue = (task) => {
-    if (!task.dueDateTime) return false;
-    const dueDateStr = task.dueDateTime.split('T')[0];
-    const dueDate = new Date(dueDateStr + 'T00:00:00');
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return dueDate < today && task.percentComplete < 100;
-  };
-
-  const getDaysUntilDue = (task) => {
-    if (!task.dueDateTime) return null;
-    const dueDate = new Date(task.dueDateTime);
-    const today = new Date();
-    const diffTime = dueDate - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
-  };
-
-  const filterAndSortTasks = (tasksToFilter) => {
-    let filtered = tasksToFilter.filter(task => task.percentComplete < 100);
-
-    // Apply filters
-    if (filters.priority) {
-      filtered = filtered.filter(task => task.priority === parseInt(filters.priority));
-    }
-
-    if (filters.planId) {
-      filtered = filtered.filter(task => task.planId === filters.planId);
-    }
-
-    if (filters.dateRange) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      filtered = filtered.filter(task => {
-        if (filters.dateRange === 'none') {
-          return !task.dueDateTime;
-        }
-        if (!task.dueDateTime) return false;
-
-        const dueDateStr = task.dueDateTime.split('T')[0];
-        const dueDate = new Date(dueDateStr + 'T00:00:00');
-        dueDate.setHours(0, 0, 0, 0);
-
-        switch (filters.dateRange) {
-          case 'overdue':
-            return dueDate < today;
-          case 'today':
-            return dueDate.getTime() === today.getTime();
-          case 'week':
-            const weekFromNow = new Date(today);
-            weekFromNow.setDate(weekFromNow.getDate() + 7);
-            return dueDate >= today && dueDate <= weekFromNow;
-          case 'month':
-            const monthFromNow = new Date(today);
-            monthFromNow.setMonth(monthFromNow.getMonth() + 1);
-            return dueDate >= today && dueDate <= monthFromNow;
-          case 'custom':
-            // Handle custom date range
-            const hasStartDate = filters.customStartDate;
-            const hasEndDate = filters.customEndDate;
-
-            if (!hasStartDate && !hasEndDate) {
-              return true; // No custom dates set, show all
-            }
-
-            if (hasStartDate && hasEndDate) {
-              const startDate = new Date(filters.customStartDate + 'T00:00:00');
-              const endDate = new Date(filters.customEndDate + 'T00:00:00');
-              startDate.setHours(0, 0, 0, 0);
-              endDate.setHours(0, 0, 0, 0);
-              return dueDate >= startDate && dueDate <= endDate;
-            }
-
-            if (hasStartDate) {
-              const startDate = new Date(filters.customStartDate + 'T00:00:00');
-              startDate.setHours(0, 0, 0, 0);
-              return dueDate >= startDate;
-            }
-
-            if (hasEndDate) {
-              const endDate = new Date(filters.customEndDate + 'T00:00:00');
-              endDate.setHours(0, 0, 0, 0);
-              return dueDate <= endDate;
-            }
-
-            return true;
-          default:
-            return true;
-        }
-      });
-    }
-
-    // Sort
-    filtered.sort((a, b) => {
-      if (sortBy === 'priority') {
-        return (a.priority || 5) - (b.priority || 5);
-      } else if (sortBy === 'dueDate') {
-        if (!a.dueDateTime && !b.dueDateTime) return 0;
-        if (!a.dueDateTime) return 1;
-        if (!b.dueDateTime) return -1;
-        return new Date(a.dueDateTime) - new Date(b.dueDateTime);
-      }
-      return 0;
-    });
-
-    return filtered;
   };
 
   // Task actions
@@ -630,10 +459,6 @@ function App() {
     setEditingTaskDetails(details);
   };
 
-  const handleToggleAllTasksCollapse = () => {
-    setAllTasksCollapsed(prev => !prev);
-  };
-
   // Multi-select handlers
   const handleToggleTaskSelection = (taskId) => {
     setSelectedTaskIds(prev => {
@@ -680,38 +505,10 @@ function App() {
 
   const handleBulkPriority = async (priority) => {
     const idsArray = Array.from(selectedTaskIds);
-    const successfulIds = [];
-
-    for (const taskId of idsArray) {
-      try {
-        // Fetch fresh task to get current etag
-        const taskResponse = await fetch(
-          `https://graph.microsoft.com/v1.0/planner/tasks/${taskId}`,
-          {
-            headers: { 'Authorization': `Bearer ${auth.accessToken}` }
-          }
-        );
-        const freshTask = await taskResponse.json();
-
-        // Update priority using fresh etag
-        await fetch(
-          `https://graph.microsoft.com/v1.0/planner/tasks/${taskId}`,
-          {
-            method: 'PATCH',
-            headers: {
-              'Authorization': `Bearer ${auth.accessToken}`,
-              'Content-Type': 'application/json',
-              'If-Match': freshTask['@odata.etag']
-            },
-            body: JSON.stringify({ priority })
-          }
-        );
-
-        successfulIds.push(taskId);
-      } catch (err) {
-        console.error(`Failed to update priority for task ${taskId}:`, err);
-      }
-    }
+    const { successfulIds, failedIds, errors } = await forEachTask(idsArray, (taskId) =>
+      patchPlannerTask(auth.accessToken, taskId, { priority })
+    );
+    errors.forEach((err, i) => console.error(`Failed to update priority for task ${failedIds[i]}:`, err));
 
     // Refresh tasks to show updated priorities
     if (successfulIds.length > 0) {
@@ -723,8 +520,8 @@ function App() {
       const priorityNames = { 1: 'Urgent', 3: 'Important', 5: 'Medium', 9: 'Low' };
       showToast(`Updated priority to ${priorityNames[priority]} for ${successfulIds.length} task${successfulIds.length > 1 ? 's' : ''}`, 'success');
     }
-    if (successfulIds.length < idsArray.length) {
-      showToast(`Failed to update ${idsArray.length - successfulIds.length} task${idsArray.length - successfulIds.length > 1 ? 's' : ''}`, 'error');
+    if (failedIds.length > 0) {
+      showToast(`Failed to update ${failedIds.length} task${failedIds.length > 1 ? 's' : ''}`, 'error');
     }
   };
 
@@ -744,38 +541,10 @@ function App() {
     }
 
     const idsArray = Array.from(taskIds);
-    const successfulIds = [];
-
-    for (const taskId of idsArray) {
-      try {
-        // Fetch fresh task to get current etag
-        const taskResponse = await fetch(
-          `https://graph.microsoft.com/v1.0/planner/tasks/${taskId}`,
-          {
-            headers: { 'Authorization': `Bearer ${auth.accessToken}` }
-          }
-        );
-        const freshTask = await taskResponse.json();
-
-        // Update due date using fresh etag
-        await fetch(
-          `https://graph.microsoft.com/v1.0/planner/tasks/${taskId}`,
-          {
-            method: 'PATCH',
-            headers: {
-              'Authorization': `Bearer ${auth.accessToken}`,
-              'Content-Type': 'application/json',
-              'If-Match': freshTask['@odata.etag']
-            },
-            body: JSON.stringify({ dueDateTime })
-          }
-        );
-
-        successfulIds.push(taskId);
-      } catch (err) {
-        console.error(`Failed to update due date for task ${taskId}:`, err);
-      }
-    }
+    const { successfulIds, failedIds, errors } = await forEachTask(idsArray, (taskId) =>
+      patchPlannerTask(auth.accessToken, taskId, { dueDateTime })
+    );
+    errors.forEach((err, i) => console.error(`Failed to update due date for task ${failedIds[i]}:`, err));
 
     // Refresh tasks to show updated due dates
     if (successfulIds.length > 0) {
@@ -789,62 +558,33 @@ function App() {
         : `Cleared due date for ${successfulIds.length} task${successfulIds.length > 1 ? 's' : ''}`;
       showToast(message, 'success');
     }
-    if (successfulIds.length < idsArray.length) {
-      showToast(`Failed to update ${idsArray.length - successfulIds.length} task${idsArray.length - successfulIds.length > 1 ? 's' : ''}`, 'error');
+    if (failedIds.length > 0) {
+      showToast(`Failed to update ${failedIds.length} task${failedIds.length > 1 ? 's' : ''}`, 'error');
     }
   };
 
   const handleBulkAssignee = async (taskIds, selectedUserIds) => {
     const idsArray = Array.from(taskIds);
-    const successfulIds = [];
     const userIdsArray = Array.from(selectedUserIds);
 
-    for (const taskId of idsArray) {
-      try {
-        // Fetch fresh task to get current etag
-        const taskResponse = await fetch(
-          `https://graph.microsoft.com/v1.0/planner/tasks/${taskId}`,
-          {
-            headers: { 'Authorization': `Bearer ${auth.accessToken}` }
-          }
-        );
-        const freshTask = await taskResponse.json();
+    const { successfulIds, failedIds, errors } = await forEachTask(idsArray, async (taskId) => {
+      // Fetch fresh task to find existing assignments to clear
+      const freshTask = await graphRequest(auth.accessToken, `/planner/tasks/${taskId}`);
 
-        // Build assignments object
-        const assignments = {};
+      const assignments = {};
+      Object.keys(freshTask.assignments || {}).forEach(userId => {
+        assignments[userId] = null;
+      });
+      userIdsArray.forEach(userId => {
+        assignments[userId] = {
+          '@odata.type': '#microsoft.graph.plannerAssignment',
+          orderHint: ' !'
+        };
+      });
 
-        // First, clear all existing assignments
-        Object.keys(freshTask.assignments || {}).forEach(userId => {
-          assignments[userId] = null;
-        });
-
-        // Then add new assignments
-        userIdsArray.forEach(userId => {
-          assignments[userId] = {
-            '@odata.type': '#microsoft.graph.plannerAssignment',
-            orderHint: ' !'
-          };
-        });
-
-        // Update assignments using fresh etag
-        await fetch(
-          `https://graph.microsoft.com/v1.0/planner/tasks/${taskId}`,
-          {
-            method: 'PATCH',
-            headers: {
-              'Authorization': `Bearer ${auth.accessToken}`,
-              'Content-Type': 'application/json',
-              'If-Match': freshTask['@odata.etag']
-            },
-            body: JSON.stringify({ assignments })
-          }
-        );
-
-        successfulIds.push(taskId);
-      } catch (err) {
-        console.error(`Failed to update assignees for task ${taskId}:`, err);
-      }
-    }
+      return patchPlannerTask(auth.accessToken, taskId, { assignments });
+    });
+    errors.forEach((err, i) => console.error(`Failed to update assignees for task ${failedIds[i]}:`, err));
 
     // Refresh tasks to show updated assignments
     if (successfulIds.length > 0) {
@@ -859,49 +599,21 @@ function App() {
         showToast(`Assigned ${successfulIds.length} task${successfulIds.length > 1 ? 's' : ''} to ${userIdsArray.length} user${userIdsArray.length > 1 ? 's' : ''}`, 'success');
       }
     }
-    if (successfulIds.length < idsArray.length) {
-      showToast(`Failed to update ${idsArray.length - successfulIds.length} task${idsArray.length - successfulIds.length > 1 ? 's' : ''}`, 'error');
+    if (failedIds.length > 0) {
+      showToast(`Failed to update ${failedIds.length} task${failedIds.length > 1 ? 's' : ''}`, 'error');
     }
   };
 
   const handleBulkMove = async (taskIds, selectedPlanId, selectedBucketId) => {
     const selectedPlanName = taskManager.plans[selectedPlanId];
     const idsArray = Array.from(taskIds);
-    const successfulIds = [];
-
-    for (const taskId of idsArray) {
-      try {
-        // Fetch fresh task to get current etag
-        const taskResponse = await fetch(
-          `https://graph.microsoft.com/v1.0/planner/tasks/${taskId}`,
-          {
-            headers: { 'Authorization': `Bearer ${auth.accessToken}` }
-          }
-        );
-        const freshTask = await taskResponse.json();
-
-        // Update plan and bucket using fresh etag
-        await fetch(
-          `https://graph.microsoft.com/v1.0/planner/tasks/${taskId}`,
-          {
-            method: 'PATCH',
-            headers: {
-              'Authorization': `Bearer ${auth.accessToken}`,
-              'Content-Type': 'application/json',
-              'If-Match': freshTask['@odata.etag']
-            },
-            body: JSON.stringify({
-              planId: selectedPlanId,
-              bucketId: selectedBucketId
-            })
-          }
-        );
-
-        successfulIds.push(taskId);
-      } catch (err) {
-        console.error(`Failed to move task ${taskId}:`, err);
-      }
-    }
+    const { successfulIds, failedIds, errors } = await forEachTask(idsArray, (taskId) =>
+      patchPlannerTask(auth.accessToken, taskId, {
+        planId: selectedPlanId,
+        bucketId: selectedBucketId
+      })
+    );
+    errors.forEach((err, i) => console.error(`Failed to move task ${failedIds[i]}:`, err));
 
     // Refresh tasks to show updated locations
     if (successfulIds.length > 0) {
@@ -912,8 +624,8 @@ function App() {
 
       showToast(`Moved ${successfulIds.length} task${successfulIds.length > 1 ? 's' : ''} to ${selectedPlanName}`, 'success');
     }
-    if (successfulIds.length < idsArray.length) {
-      showToast(`Failed to move ${idsArray.length - successfulIds.length} task${idsArray.length - successfulIds.length > 1 ? 's' : ''}`, 'error');
+    if (failedIds.length > 0) {
+      showToast(`Failed to move ${failedIds.length} task${failedIds.length > 1 ? 's' : ''}`, 'error');
     }
   };
 
@@ -999,29 +711,6 @@ function App() {
     }
 
     handleDragEnd();
-  };
-
-  // Dashboard metrics
-  const getDateRangeStart = () => {
-    const now = new Date();
-    switch (dateRange) {
-      case '7days':
-        return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      case '30days':
-        return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      case '90days':
-        return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-      default:
-        return new Date(0);
-    }
-  };
-
-  const getFilteredCompletedTasks = () => {
-    const startDate = getDateRangeStart();
-    return completedTasksHistory.filter(task => {
-      const completedDate = new Date(task.completedDateTime);
-      return completedDate >= startDate;
-    });
   };
 
   const calculateStreak = () => {
@@ -1136,14 +825,6 @@ function App() {
   if (!auth.isAuthenticated) {
     return <LoginScreen onLogin={auth.handleLogin} loading={auth.loading} />;
   }
-
-  const filteredTasks = filterAndSortTasks(taskManager.tasks);
-
-  // Calculate pagination
-  const totalPages = Math.ceil(filteredTasks.length / tasksPerPage);
-  const startIndex = (currentPage - 1) * tasksPerPage;
-  const endIndex = startIndex + tasksPerPage;
-  const paginatedTasks = filteredTasks.slice(startIndex, endIndex);
 
   const priorityTasks = priorityQueue
     .map(id => taskManager.tasks.find(t => t.id === id))

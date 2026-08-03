@@ -80,8 +80,8 @@ All credentials are stored in `backend/local.settings.json`:
 {
   "Values": {
     "SLACK_CLIENT_ID": "20478714756.9785587179955",
-    "SLACK_CLIENT_SECRET": "25faaa6cef904531be0a8557c3524d93",
-    "SLACK_SIGNING_SECRET": "19afb032cca4173d1a05a12884ac0258",
+    "SLACK_CLIENT_SECRET": "your-slack-client-secret-here",
+    "SLACK_SIGNING_SECRET": "your-slack-signing-secret-here",
     "SLACK_APP_ID": "A09P3H959U3"
   }
 }
@@ -99,8 +99,8 @@ Add these environment variables to your Azure Function App:
 
 ```
 SLACK_CLIENT_ID = 20478714756.9785587179955
-SLACK_CLIENT_SECRET = 25faaa6cef904531be0a8557c3524d93
-SLACK_SIGNING_SECRET = 19afb032cca4173d1a05a12884ac0258
+SLACK_CLIENT_SECRET = your-slack-client-secret-here
+SLACK_SIGNING_SECRET = your-slack-signing-secret-here
 SLACK_APP_ID = A09P3H959U3
 ```
 
@@ -115,8 +115,8 @@ az functionapp config appsettings set \
   --resource-group taskcommand-rg \
   --settings \
     SLACK_CLIENT_ID="20478714756.9785587179955" \
-    SLACK_CLIENT_SECRET="25faaa6cef904531be0a8557c3524d93" \
-    SLACK_SIGNING_SECRET="19afb032cca4173d1a05a12884ac0258" \
+    SLACK_CLIENT_SECRET="your-slack-client-secret-here" \
+    SLACK_SIGNING_SECRET="your-slack-signing-secret-here" \
     SLACK_APP_ID="A09P3H959U3"
 ```
 

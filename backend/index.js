@@ -656,7 +656,29 @@ app.http('SlackOAuthCallback', {
       context.log(`Redirect URI: ${redirectUri}`);
       context.log(`Code: ${code.substring(0, 20)}...`);
 
-      const oauthResult = await slackService.exchangeOAuthCode(code, redirectUri);
+      let oauthResult;
+      try {
+        oauthResult = await slackService.exchangeOAuthCode(code, redirectUri);
+      } catch (err) {
+        // Slack returns invalid_code when a code is redeemed twice, which
+        // happens when the browser requests the callback URL more than once
+        // (prefetch, duplicate navigation). If the first request already
+        // linked this user, treat the duplicate as success instead of
+        // bouncing the user to an error page.
+        if (String(err.message).includes('invalid_code')) {
+          const existing = await storage.getSlackUserMapping(azureUserId);
+          if (existing) {
+            context.log('Duplicate OAuth callback: code already redeemed and mapping exists; treating as success');
+            return {
+              status: 302,
+              headers: {
+                'Location': `${returnOrigin}/?view=settings&slack_connected=true`
+              }
+            };
+          }
+        }
+        throw err;
+      }
 
       context.log(`OAuth successful. Slack User ID: ${oauthResult.authedUser.id}`);
 

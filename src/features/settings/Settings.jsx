@@ -107,12 +107,10 @@ export default function Settings({ accessToken, user, focusReminderInterval, set
   }, [accessToken]);
 
   const checkSlackConnection = async () => {
-    console.log('checkSlackConnection called');
-    console.log('accessToken:', accessToken ? `${accessToken.substring(0, 50)}...` : 'undefined');
-    console.log('user:', user);
-
-    if (!accessToken || !user) {
-      console.log('No accessToken or user - setting connection to false');
+    // Only the token is needed for the status call; requiring `user` too
+    // created a race on fresh page loads (e.g. returning from OAuth) where
+    // the profile fetch hadn't resolved yet and the effect never re-ran.
+    if (!accessToken) {
       setLoading(false);
       setSlackConnection({ connected: false });
       return;

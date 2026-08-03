@@ -10,6 +10,20 @@ const taskPollingService = require('./services/taskPollingService');
 const morningDigestService = require('./services/morningDigestService');
 const { getTaskComments, addTaskComment } = require('./services/commentService');
 
+// CORS: echo the request's origin when it's in the ALLOWED_ORIGINS list.
+// A comma-separated list must never be sent as the header value directly -
+// browsers reject it as invalid.
+const ALLOWED_ORIGIN_LIST = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+function corsOrigin(request) {
+  if (ALLOWED_ORIGIN_LIST.length === 0) return '*';
+  const origin = request.headers.get('origin');
+  return origin && ALLOWED_ORIGIN_LIST.includes(origin) ? origin : ALLOWED_ORIGIN_LIST[0];
+}
+
 /**
  * Azure Function: Get Company Tasks
  *
@@ -27,7 +41,7 @@ app.http('GetCompanyTasks', {
 
     // CORS headers
     const corsHeaders = {
-      'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGINS || '*',
+      'Access-Control-Allow-Origin': corsOrigin(request),
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Allow-Credentials': 'true',
@@ -147,7 +161,7 @@ app.http('CompleteTask', {
 
     // CORS headers
     const corsHeaders = {
-      'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGINS || '*',
+      'Access-Control-Allow-Origin': corsOrigin(request),
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Allow-Credentials': 'true',
@@ -304,7 +318,7 @@ app.http('ReopenTask', {
 
     // CORS headers
     const corsHeaders = {
-      'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGINS || '*',
+      'Access-Control-Allow-Origin': corsOrigin(request),
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Allow-Credentials': 'true',
@@ -506,8 +520,10 @@ app.http('SlackOAuthCallback', {
       context.log('Exchanging OAuth code for access token...');
       let redirectUri = `${request.url.split('?')[0]}`; // Get callback URL without query params
 
-      // ngrok always uses HTTPS, but forwards as HTTP - fix the protocol
-      if (redirectUri.includes('ngrok') && redirectUri.startsWith('http://')) {
+      // Reverse proxies (Railway, ngrok) terminate TLS and forward as HTTP -
+      // rebuild with the original protocol so the URI matches Slack's registered redirect URL
+      const forwardedProto = request.headers.get('x-forwarded-proto');
+      if (forwardedProto === 'https' && redirectUri.startsWith('http://')) {
         redirectUri = redirectUri.replace('http://', 'https://');
       }
 
@@ -583,7 +599,7 @@ app.http('GetSlackConnectionStatus', {
     context.log('GetSlackConnectionStatus function triggered');
 
     const corsHeaders = {
-      'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGINS || '*',
+      'Access-Control-Allow-Origin': corsOrigin(request),
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Allow-Credentials': 'true',
@@ -672,7 +688,7 @@ app.http('DisconnectSlack', {
     context.log('DisconnectSlack function triggered');
 
     const corsHeaders = {
-      'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGINS || '*',
+      'Access-Control-Allow-Origin': corsOrigin(request),
       'Access-Control-Allow-Methods': 'DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Allow-Credentials': 'true',
@@ -738,7 +754,7 @@ app.http('UpdateSlackPreferences', {
     context.log('UpdateSlackPreferences function triggered');
 
     const corsHeaders = {
-      'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGINS || '*',
+      'Access-Control-Allow-Origin': corsOrigin(request),
       'Access-Control-Allow-Methods': 'PUT, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Allow-Credentials': 'true',
@@ -804,7 +820,7 @@ app.http('GetAvailablePlans', {
     context.log('GetAvailablePlans function triggered');
 
     const corsHeaders = {
-      'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGINS || '*',
+      'Access-Control-Allow-Origin': corsOrigin(request),
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Allow-Credentials': 'true',
@@ -1061,7 +1077,7 @@ app.http('TaskComments', {
 
     // CORS headers
     const corsHeaders = {
-      'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGINS || '*',
+      'Access-Control-Allow-Origin': corsOrigin(request),
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Allow-Credentials': 'true',

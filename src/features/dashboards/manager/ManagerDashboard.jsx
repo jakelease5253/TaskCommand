@@ -5,8 +5,7 @@ import DateRangeMultiSelect from "../../../components/tasks/DateRangeMultiSelect
 import ThemedSelect from "../../../components/tasks/ThemedSelect";
 import { matchesDateRanges } from "../../../utils/dateFilters";
 
-// Temporarily hardcoded - same issue as Settings with env vars not loading
-const BACKEND_URL = 'https://taskcommand.ngrok.app';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:7071';
 
 export default function ManagerDashboard({
   accessToken,

@@ -45,10 +45,7 @@ export default function Settings({ accessToken, user, focusReminderInterval, set
   const [selectedBucket, setSelectedBucket] = useState(null);
   const [plansLoading, setPlansLoading] = useState(false);
 
-  // Backend URL - TEMPORARILY HARDCODED for Slack OAuth
-  // TODO: Fix environment variable loading issue
-  const backendUrl = 'https://taskcommand.ngrok.app';
-  console.log('Using hardcoded backend URL:', backendUrl);
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:7071';
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -135,7 +132,6 @@ export default function Settings({ accessToken, user, focusReminderInterval, set
       const response = await fetch(`${backendUrl}/api/slack/connection/status`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
-          'ngrok-skip-browser-warning': 'true'
         }
       });
 
@@ -211,7 +207,6 @@ export default function Settings({ accessToken, user, focusReminderInterval, set
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
-          'ngrok-skip-browser-warning': 'true'
         }
       });
 
@@ -243,7 +238,6 @@ export default function Settings({ accessToken, user, focusReminderInterval, set
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true'
         },
         body: JSON.stringify(updatedPrefs)
       });
@@ -425,7 +419,6 @@ export default function Settings({ accessToken, user, focusReminderInterval, set
       const response = await fetch(`${backendUrl}/api/slack/plans`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
-          'ngrok-skip-browser-warning': 'true'
         }
       });
 

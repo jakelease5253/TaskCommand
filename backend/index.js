@@ -34,7 +34,10 @@ function corsOrigin(request) {
  * Returns all company-wide tasks using application permissions
  */
 app.http('GetCompanyTasks', {
-  methods: ['GET'],
+  // OPTIONS must be registered here, not just handled in the handler -
+  // otherwise the host 404s the CORS preflight and the browser reports
+  // "Load failed" before the GET is ever sent
+  methods: ['GET', 'OPTIONS'],
   route: 'tasks/company',
   authLevel: 'anonymous',
   handler: async (request, context) => {
@@ -1060,6 +1063,49 @@ app.http('GetAvailablePlans', {
         headers: corsHeaders,
         jsonBody: { error: 'Internal server error' }
       };
+    }
+  }
+});
+
+/**
+ * Azure Function: Slack Interactivity
+ *
+ * Endpoint: POST /api/slack/interactive
+ * Auth: Slack request signature verification
+ *
+ * Acknowledges block_actions payloads. Our only interactive elements are
+ * URL buttons ("View Task") - the browser opens the link on its own, but
+ * Slack still POSTs an interaction payload here and shows a warning icon
+ * next to the button if the request 404s.
+ */
+app.http('SlackInteractive', {
+  methods: ['POST'],
+  route: 'slack/interactive',
+  authLevel: 'anonymous',
+  handler: async (request, context) => {
+    try {
+      const body = await request.text();
+
+      const headers = {};
+      request.headers.forEach((value, key) => {
+        headers[key.toLowerCase()] = value;
+      });
+
+      if (!slackService.verifySlackRequest(headers, body)) {
+        context.error('Invalid Slack request signature');
+        return { status: 401, body: 'Invalid request signature' };
+      }
+
+      const payload = JSON.parse(new URLSearchParams(body).get('payload') || '{}');
+      const actionIds = (payload.actions || []).map((a) => a.action_id).join(', ');
+      context.log(`Slack interactive payload acknowledged: type=${payload.type} actions=${actionIds}`);
+
+      return { status: 200 };
+    } catch (error) {
+      // Still ACK - a non-200 makes Slack surface an error to the user for
+      // what is, for URL buttons, a purely informational callback
+      context.error('Error in SlackInteractive:', error);
+      return { status: 200 };
     }
   }
 });

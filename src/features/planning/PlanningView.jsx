@@ -1,9 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { GripVertical, Target, X, Search, Filter as FilterIcon, Users, Calendar, CheckSquare } from '../../components/ui/icons';
+import BulkActionsBar from '../../components/tasks/BulkActionsBar';
+import BulkAssigneeModal from '../../components/modals/BulkAssigneeModal';
+import BulkMoveModal from '../../components/modals/BulkMoveModal';
+import BulkDueDateModal from '../../components/modals/BulkDueDateModal';
+import DateRangeMultiSelect from '../../components/tasks/DateRangeMultiSelect';
+import ThemedSelect from '../../components/tasks/ThemedSelect';
+import { matchesDateRanges } from '../../utils/dateFilters';
 
 export default function PlanningView({
   tasks,
   plans,
+  buckets,
   priorityQueue,
   onUpdatePriorityQueue,
   userProfiles,
@@ -12,12 +20,17 @@ export default function PlanningView({
   workHours,
   dailyGoals,
   onOpenGoalSettings,
+  onBulkComplete,
+  onBulkPriority,
+  onBulkDueDate,
+  onBulkAssignee,
+  onBulkMove,
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
   const [filterPlan, setFilterPlan] = useState('');
   const [sortBy, setSortBy] = useState('dueDate');
-  const [dateFilter, setDateFilter] = useState(''); // 'overdue', 'today', 'week', 'noDate', 'custom'
+  const [selectedDateRanges, setSelectedDateRanges] = useState([]); // Array of: 'all', 'overdue', 'today', 'tomorrow', 'thisWeek', 'nextWeek', 'backlog'
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [draggedTask, setDraggedTask] = useState(null);
@@ -26,6 +39,12 @@ export default function PlanningView({
   const [hoveredTask, setHoveredTask] = useState(null);
   const [taskDetails, setTaskDetails] = useState({});
   const [hoverTimeout, setHoverTimeout] = useState(null);
+
+  // Multi-select state for bulk operations
+  const [selectedTaskIds, setSelectedTaskIds] = useState(new Set());
+  const [showBulkAssigneeModal, setShowBulkAssigneeModal] = useState(false);
+  const [showBulkMoveModal, setShowBulkMoveModal] = useState(false);
+  const [showBulkDueDateModal, setShowBulkDueDateModal] = useState(false);
 
   // Get IDs of tasks in priority queue
   const priorityTaskIds = priorityQueue.map(t => t.id);
@@ -81,46 +100,9 @@ export default function PlanningView({
       return false;
     }
 
-    // Date filters
-    if (dateFilter) {
-      if (!task.dueDateTime && dateFilter !== 'noDate') {
-        return false;
-      }
-
-      if (task.dueDateTime) {
-        const dueDateStr = task.dueDateTime.split('T')[0];
-        const dueDate = new Date(dueDateStr + 'T00:00:00');
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        switch (dateFilter) {
-          case 'overdue':
-            if (dueDate >= today) return false;
-            break;
-          case 'today':
-            if (dueDate.getTime() !== today.getTime()) return false;
-            break;
-          case 'week':
-            const weekEnd = new Date(today);
-            weekEnd.setDate(today.getDate() + 7);
-            if (dueDate < today || dueDate > weekEnd) return false;
-            break;
-          case 'noDate':
-            return false; // has a date but filter is for no date
-          case 'custom':
-            if (customStartDate || customEndDate) {
-              const startDate = customStartDate ? new Date(customStartDate + 'T00:00:00') : null;
-              const endDate = customEndDate ? new Date(customEndDate + 'T00:00:00') : null;
-
-              if (startDate) startDate.setHours(0, 0, 0, 0);
-              if (endDate) endDate.setHours(0, 0, 0, 0);
-
-              if (startDate && dueDate < startDate) return false;
-              if (endDate && dueDate > endDate) return false;
-            }
-            break;
-        }
-      }
+    // Date filters (multi-select)
+    if (!matchesDateRanges(task, selectedDateRanges, customStartDate, customEndDate)) {
+      return false;
     }
 
     return true;
@@ -164,7 +146,28 @@ export default function PlanningView({
 
   const formatDate = (dateString) => {
     if (!dateString) return 'No date';
-    return new Date(dateString).toLocaleDateString();
+    // Extract just the date part and treat as local, avoiding UTC conversion
+    const datePart = dateString.split('T')[0];
+    const [year, month, day] = datePart.split('-');
+    const localDate = new Date(year, month - 1, day);
+    return localDate.toLocaleDateString();
+  };
+
+  // Multi-select handlers
+  const handleToggleSelection = (taskId) => {
+    setSelectedTaskIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(taskId)) {
+        newSet.delete(taskId);
+      } else {
+        newSet.add(taskId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleClearSelection = () => {
+    setSelectedTaskIds(new Set());
   };
 
   // Drag and drop handlers
@@ -200,8 +203,8 @@ export default function PlanningView({
       }
     } else {
       // Adding from task list
-      if (newQueue.length >= 7) {
-        alert('Priority Queue is full (maximum 7 tasks)');
+      if (newQueue.length >= 10) {
+        alert('Priority Queue is full (maximum 10 tasks)');
         setDraggedTask(null);
         setDraggedFromQueue(false);
         setDragOverIndex(null);
@@ -343,21 +346,33 @@ export default function PlanningView({
                   {dayHours.enabled ? (
                     <>
                       <div style={{
-                        fontSize: '20px',
+                        fontSize: '24px',
                         fontWeight: '700',
                         fontFamily: 'Poppins',
                         color: 'var(--theme-primary-dark)',
                         textAlign: 'center',
-                        marginBottom: '4px'
+                        marginBottom: '8px'
                       }}>{totalDayTasks}</div>
                       <div style={{
-                        fontSize: '10px',
+                        fontSize: '9px',
                         fontFamily: 'Poppins',
-                        color: '#64748b',
-                        textAlign: 'center'
+                        color: '#94a3b8',
+                        textAlign: 'center',
+                        marginTop: '6px',
+                        borderTop: '1px solid #e5e7eb',
+                        paddingTop: '6px'
                       }}>
-                        <div>{dayGoals.morningTasks} AM</div>
-                        <div>{dayGoals.afternoonTasks} PM</div>
+                        {(() => {
+                          // Convert 24-hour time to 12-hour format
+                          const formatTime = (time) => {
+                            const [hours, minutes] = time.split(':');
+                            const hour = parseInt(hours);
+                            const ampm = hour >= 12 ? 'PM' : 'AM';
+                            const hour12 = hour % 12 || 12;
+                            return `${hour12}:${minutes} ${ampm}`;
+                          };
+                          return `${formatTime(dayHours.start)} - ${formatTime(dayHours.end)}`;
+                        })()}
                       </div>
                     </>
                   ) : (
@@ -532,200 +547,60 @@ export default function PlanningView({
               </div>
 
               {/* Sort and Filter Controls */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-wrap gap-3">
                 {/* Sort By */}
-                <select
+                <ThemedSelect
                   value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  style={{
-                    padding: '8px 12px',
-                    fontSize: '14px',
-                    fontFamily: 'Poppins',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '8px',
-                    outline: 'none',
-                    cursor: 'pointer'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.boxShadow = '0 0 0 2px var(--theme-primary)';
-                    e.target.style.borderColor = 'transparent';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.boxShadow = 'none';
-                    e.target.style.borderColor = '#d1d5db';
-                  }}
-                >
-                  <option value="dueDate">Sort: Due Date</option>
-                  <option value="priority">Sort: Priority</option>
-                  <option value="plan">Sort: Plan</option>
-                  <option value="title">Sort: Title</option>
-                </select>
+                  onChange={setSortBy}
+                  options={[
+                    { value: 'dueDate', label: 'Sort: Due Date' },
+                    { value: 'priority', label: 'Sort: Priority' },
+                    { value: 'plan', label: 'Sort: Plan' },
+                    { value: 'title', label: 'Sort: Title' }
+                  ]}
+                  placeholder="Sort by..."
+                />
 
                 {/* Date Filter */}
-                <select
-                  value={dateFilter}
-                  onChange={(e) => {
-                    setDateFilter(e.target.value);
-                    if (e.target.value !== 'custom') {
-                      setCustomStartDate('');
-                      setCustomEndDate('');
-                    }
+                <DateRangeMultiSelect
+                  selectedRanges={selectedDateRanges}
+                  onChange={setSelectedDateRanges}
+                  customStartDate={customStartDate}
+                  customEndDate={customEndDate}
+                  onCustomDateChange={(start, end) => {
+                    setCustomStartDate(start);
+                    setCustomEndDate(end);
                   }}
-                  style={{
-                    padding: '8px 12px',
-                    fontSize: '14px',
-                    fontFamily: 'Poppins',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '8px',
-                    outline: 'none',
-                    cursor: 'pointer'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.boxShadow = '0 0 0 2px var(--theme-primary)';
-                    e.target.style.borderColor = 'transparent';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.boxShadow = 'none';
-                    e.target.style.borderColor = '#d1d5db';
-                  }}
-                >
-                  <option value="">All Dates</option>
-                  <option value="overdue">Overdue</option>
-                  <option value="today">Due Today</option>
-                  <option value="week">Due This Week</option>
-                  <option value="noDate">No Due Date</option>
-                  <option value="custom">Custom Range...</option>
-                </select>
+                />
 
                 {/* Priority Filter */}
-                <select
+                <ThemedSelect
                   value={filterPriority}
-                  onChange={(e) => setFilterPriority(e.target.value)}
-                  style={{
-                    padding: '8px 12px',
-                    fontSize: '14px',
-                    fontFamily: 'Poppins',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '8px',
-                    outline: 'none',
-                    cursor: 'pointer'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.boxShadow = '0 0 0 2px var(--theme-primary)';
-                    e.target.style.borderColor = 'transparent';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.boxShadow = 'none';
-                    e.target.style.borderColor = '#d1d5db';
-                  }}
-                >
-                  <option value="">All Priorities</option>
-                  <option value="1">Urgent</option>
-                  <option value="3">Important</option>
-                  <option value="5">Medium</option>
-                  <option value="9">Low</option>
-                </select>
+                  onChange={setFilterPriority}
+                  options={[
+                    { value: '', label: 'All Priorities' },
+                    { value: '1', label: 'Urgent' },
+                    { value: '3', label: 'Important' },
+                    { value: '5', label: 'Medium' },
+                    { value: '9', label: 'Low' }
+                  ]}
+                  placeholder="All Priorities"
+                />
 
                 {/* Plan Filter */}
-                <select
+                <ThemedSelect
                   value={filterPlan}
-                  onChange={(e) => setFilterPlan(e.target.value)}
-                  style={{
-                    padding: '8px 12px',
-                    fontSize: '14px',
-                    fontFamily: 'Poppins',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '8px',
-                    outline: 'none',
-                    cursor: 'pointer'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.boxShadow = '0 0 0 2px var(--theme-primary)';
-                    e.target.style.borderColor = 'transparent';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.boxShadow = 'none';
-                    e.target.style.borderColor = '#d1d5db';
-                  }}
-                >
-                  <option value="">All Plans</option>
-                  {Object.entries(plans).map(([id, name]) => (
-                    <option key={id} value={id}>{name}</option>
-                  ))}
-                </select>
+                  onChange={setFilterPlan}
+                  options={[
+                    { value: '', label: 'All Plans' },
+                    ...Object.entries(plans).map(([id, name]) => ({
+                      value: id,
+                      label: name
+                    }))
+                  ]}
+                  placeholder="All Plans"
+                />
               </div>
-
-              {/* Custom Date Range */}
-              {dateFilter === 'custom' && (
-                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200">
-                  <div>
-                    <label style={{
-                      display: 'block',
-                      fontSize: '12px',
-                      fontWeight: '500',
-                      fontFamily: 'Poppins',
-                      color: '#64748b',
-                      marginBottom: '4px'
-                    }}>From Date</label>
-                    <input
-                      type="date"
-                      value={customStartDate}
-                      onChange={(e) => setCustomStartDate(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '8px 12px',
-                        fontSize: '14px',
-                        fontFamily: 'Poppins',
-                        border: '1px solid #d1d5db',
-                        borderRadius: '8px',
-                        outline: 'none',
-                        cursor: 'pointer'
-                      }}
-                      onFocus={(e) => {
-                        e.target.style.boxShadow = '0 0 0 2px var(--theme-primary)';
-                        e.target.style.borderColor = 'transparent';
-                      }}
-                      onBlur={(e) => {
-                        e.target.style.boxShadow = 'none';
-                        e.target.style.borderColor = '#d1d5db';
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{
-                      display: 'block',
-                      fontSize: '12px',
-                      fontWeight: '500',
-                      fontFamily: 'Poppins',
-                      color: '#64748b',
-                      marginBottom: '4px'
-                    }}>To Date</label>
-                    <input
-                      type="date"
-                      value={customEndDate}
-                      onChange={(e) => setCustomEndDate(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '8px 12px',
-                        fontSize: '14px',
-                        fontFamily: 'Poppins',
-                        border: '1px solid #d1d5db',
-                        borderRadius: '8px',
-                        outline: 'none',
-                        cursor: 'pointer'
-                      }}
-                      onFocus={(e) => {
-                        e.target.style.boxShadow = '0 0 0 2px var(--theme-primary)';
-                        e.target.style.borderColor = 'transparent';
-                      }}
-                      onBlur={(e) => {
-                        e.target.style.boxShadow = 'none';
-                        e.target.style.borderColor = '#d1d5db';
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Task List - Compact Table */}
@@ -799,6 +674,21 @@ export default function PlanningView({
                           inQueue ? 'opacity-40 cursor-not-allowed' : 'cursor-move'
                         }`}
                       >
+                        {/* Selection Checkbox */}
+                        <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedTaskIds.has(task.id)}
+                            onChange={() => handleToggleSelection(task.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              width: '16px',
+                              height: '16px',
+                              cursor: 'pointer'
+                            }}
+                          />
+                        </div>
+
                         {/* Drag Handle */}
                         <div className="flex-shrink-0">
                           {inQueue ? (
@@ -950,103 +840,367 @@ export default function PlanningView({
                 fontFamily: 'Poppins',
                 color: '#64748b'
               }}>
-                {priorityQueue.length} / 7 tasks
+                {priorityQueue.length} / 10 tasks
               </p>
             </div>
 
-            <div className="p-4 space-y-2">
-              {/* Empty slots and filled slots */}
-              {[...Array(7)].map((_, index) => {
-                const task = priorityQueue[index];
-                const isOver = dragOverIndex === index;
+            <div className="p-4">
+              {/* Section 1: Must be worked on today */}
+              <div className="mb-4">
+                <h3 style={{
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  fontFamily: 'Poppins',
+                  color: '#dc2626',
+                  marginBottom: '8px'
+                }}>
+                  Must be worked on today
+                </h3>
+                <div className="space-y-2">
+                  {[...Array(3)].map((_, idx) => {
+                    const index = idx;
+                    const task = priorityQueue[index];
+                    const isOver = dragOverIndex === index;
 
-                return (
-                  <div
-                    key={index}
-                    onDragOver={(e) => handleDragOverSlot(e, index)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={() => handleDropOnSlot(index)}
-                    className="min-h-[60px] border-2 border-dashed rounded-lg transition-all"
-                    style={{
-                      borderColor: isOver ? 'var(--theme-primary)' : (task ? '#d1d5db' : '#e5e7eb'),
-                      backgroundColor: isOver ? '#fff9e6' : (task ? '#f8fafc' : '#ffffff')
-                    }}
-                  >
-                    {task ? (
+                    return (
                       <div
-                        draggable
-                        onDragStart={() => handleDragStart(task, true)}
-                        onDragEnd={handleDragEnd}
-                        className="cursor-move group"
-                        style={{ padding: '12px 12px 12px 8px' }}
+                        key={index}
+                        onDragOver={(e) => handleDragOverSlot(e, index)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={() => handleDropOnSlot(index)}
+                        className="min-h-[60px] border-2 border-dashed rounded-lg transition-all"
+                        style={{
+                          borderColor: isOver ? 'var(--theme-primary)' : (task ? '#d1d5db' : '#e5e7eb'),
+                          backgroundColor: isOver ? '#fff9e6' : (task ? '#f8fafc' : '#ffffff')
+                        }}
                       >
-                        <div className="flex items-center gap-2">
-                          {/* Drag Handle - Left Side */}
-                          <div className="flex-shrink-0">
-                            <GripVertical className="text-slate-400" size={16} />
-                          </div>
-
-                          {/* Content */}
-                          <div className="flex-1 min-w-0 flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span style={{
-                                  fontSize: '12px',
-                                  fontWeight: '700',
-                                  fontFamily: 'Poppins',
-                                  color: 'var(--theme-primary)',
-                                  backgroundColor: 'var(--theme-primary-dark)',
-                                  width: '24px',
-                                  height: '24px',
-                                  borderRadius: '50%',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center'
-                                }}>
-                                  {index + 1}
-                                </span>
+                        {task ? (
+                          <div
+                            draggable
+                            onDragStart={() => handleDragStart(task, true)}
+                            onDragEnd={handleDragEnd}
+                            className="cursor-move group"
+                            style={{ padding: '12px 12px 12px 8px' }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className="flex-shrink-0">
+                                <GripVertical className="text-slate-400" size={16} />
                               </div>
-                              <p style={{
-                                fontSize: '14px',
-                                fontWeight: '500',
-                                fontFamily: 'Poppins',
-                                color: 'var(--theme-primary-dark)'
-                              }} className="line-clamp-2">
-                                {task.title}
-                              </p>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
-                                  {getPriorityLabel(task.priority)}
-                                </span>
-                                <span className="text-xs text-slate-500">
-                                  {formatDate(task.dueDateTime)}
-                                </span>
+                              <div className="flex-1 min-w-0 flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span style={{
+                                      fontSize: '12px',
+                                      fontWeight: '700',
+                                      fontFamily: 'Poppins',
+                                      color: 'var(--theme-primary)',
+                                      backgroundColor: 'var(--theme-primary-dark)',
+                                      width: '24px',
+                                      height: '24px',
+                                      borderRadius: '50%',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center'
+                                    }}>
+                                      {index + 1}
+                                    </span>
+                                  </div>
+                                  <p style={{
+                                    fontSize: '14px',
+                                    fontWeight: '500',
+                                    fontFamily: 'Poppins',
+                                    color: 'var(--theme-primary-dark)'
+                                  }} className="line-clamp-2">
+                                    {task.title}
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
+                                      {getPriorityLabel(task.priority)}
+                                    </span>
+                                    <span className="text-xs text-slate-500">
+                                      {formatDate(task.dueDateTime)}
+                                    </span>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => handleRemoveFromQueue(task.id)}
+                                  className="flex-shrink-0 p-1 hover:bg-red-100 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                  title="Remove from queue"
+                                >
+                                  <X size={14} className="text-red-600" />
+                                </button>
                               </div>
                             </div>
-                            <button
-                              onClick={() => handleRemoveFromQueue(task.id)}
-                              className="flex-shrink-0 p-1 hover:bg-red-100 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                              title="Remove from queue"
-                            >
-                              <X size={14} className="text-red-600" />
-                            </button>
                           </div>
-                        </div>
+                        ) : (
+                          <div className="p-3 flex items-center justify-center h-full">
+                            <span className="text-xs text-slate-400">
+                              Drop task here
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="p-3 flex items-center justify-center h-full">
-                        <span className="text-xs text-slate-400">
-                          Drop task here
-                        </span>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Section 2: Should be worked on today */}
+              <div className="mb-4">
+                <h3 style={{
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  fontFamily: 'Poppins',
+                  color: '#ea580c',
+                  marginBottom: '8px'
+                }}>
+                  Should be worked on today
+                </h3>
+                <div className="space-y-2">
+                  {[...Array(3)].map((_, idx) => {
+                    const index = idx + 3;
+                    const task = priorityQueue[index];
+                    const isOver = dragOverIndex === index;
+
+                    return (
+                      <div
+                        key={index}
+                        onDragOver={(e) => handleDragOverSlot(e, index)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={() => handleDropOnSlot(index)}
+                        className="min-h-[60px] border-2 border-dashed rounded-lg transition-all"
+                        style={{
+                          borderColor: isOver ? 'var(--theme-primary)' : (task ? '#d1d5db' : '#e5e7eb'),
+                          backgroundColor: isOver ? '#fff9e6' : (task ? '#f8fafc' : '#ffffff')
+                        }}
+                      >
+                        {task ? (
+                          <div
+                            draggable
+                            onDragStart={() => handleDragStart(task, true)}
+                            onDragEnd={handleDragEnd}
+                            className="cursor-move group"
+                            style={{ padding: '12px 12px 12px 8px' }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className="flex-shrink-0">
+                                <GripVertical className="text-slate-400" size={16} />
+                              </div>
+                              <div className="flex-1 min-w-0 flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span style={{
+                                      fontSize: '12px',
+                                      fontWeight: '700',
+                                      fontFamily: 'Poppins',
+                                      color: 'var(--theme-primary)',
+                                      backgroundColor: 'var(--theme-primary-dark)',
+                                      width: '24px',
+                                      height: '24px',
+                                      borderRadius: '50%',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center'
+                                    }}>
+                                      {index + 1}
+                                    </span>
+                                  </div>
+                                  <p style={{
+                                    fontSize: '14px',
+                                    fontWeight: '500',
+                                    fontFamily: 'Poppins',
+                                    color: 'var(--theme-primary-dark)'
+                                  }} className="line-clamp-2">
+                                    {task.title}
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
+                                      {getPriorityLabel(task.priority)}
+                                    </span>
+                                    <span className="text-xs text-slate-500">
+                                      {formatDate(task.dueDateTime)}
+                                    </span>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => handleRemoveFromQueue(task.id)}
+                                  className="flex-shrink-0 p-1 hover:bg-red-100 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                  title="Remove from queue"
+                                >
+                                  <X size={14} className="text-red-600" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-3 flex items-center justify-center h-full">
+                            <span className="text-xs text-slate-400">
+                              Drop task here
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Section 3: If you have time today */}
+              <div>
+                <h3 style={{
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  fontFamily: 'Poppins',
+                  color: '#0891b2',
+                  marginBottom: '8px'
+                }}>
+                  If you have time today
+                </h3>
+                <div className="space-y-2">
+                  {[...Array(4)].map((_, idx) => {
+                    const index = idx + 6;
+                    const task = priorityQueue[index];
+                    const isOver = dragOverIndex === index;
+
+                    return (
+                      <div
+                        key={index}
+                        onDragOver={(e) => handleDragOverSlot(e, index)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={() => handleDropOnSlot(index)}
+                        className="min-h-[60px] border-2 border-dashed rounded-lg transition-all"
+                        style={{
+                          borderColor: isOver ? 'var(--theme-primary)' : (task ? '#d1d5db' : '#e5e7eb'),
+                          backgroundColor: isOver ? '#fff9e6' : (task ? '#f8fafc' : '#ffffff')
+                        }}
+                      >
+                        {task ? (
+                          <div
+                            draggable
+                            onDragStart={() => handleDragStart(task, true)}
+                            onDragEnd={handleDragEnd}
+                            className="cursor-move group"
+                            style={{ padding: '12px 12px 12px 8px' }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className="flex-shrink-0">
+                                <GripVertical className="text-slate-400" size={16} />
+                              </div>
+                              <div className="flex-1 min-w-0 flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span style={{
+                                      fontSize: '12px',
+                                      fontWeight: '700',
+                                      fontFamily: 'Poppins',
+                                      color: 'var(--theme-primary)',
+                                      backgroundColor: 'var(--theme-primary-dark)',
+                                      width: '24px',
+                                      height: '24px',
+                                      borderRadius: '50%',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center'
+                                    }}>
+                                      {index + 1}
+                                    </span>
+                                  </div>
+                                  <p style={{
+                                    fontSize: '14px',
+                                    fontWeight: '500',
+                                    fontFamily: 'Poppins',
+                                    color: 'var(--theme-primary-dark)'
+                                  }} className="line-clamp-2">
+                                    {task.title}
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
+                                      {getPriorityLabel(task.priority)}
+                                    </span>
+                                    <span className="text-xs text-slate-500">
+                                      {formatDate(task.dueDateTime)}
+                                    </span>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => handleRemoveFromQueue(task.id)}
+                                  className="flex-shrink-0 p-1 hover:bg-red-100 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                  title="Remove from queue"
+                                >
+                                  <X size={14} className="text-red-600" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-3 flex items-center justify-center h-full">
+                            <span className="text-xs text-slate-400">
+                              Drop task here
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Bulk Actions Bar */}
+      <BulkActionsBar
+        selectedCount={selectedTaskIds.size}
+        onClearSelection={handleClearSelection}
+        onBulkComplete={() => {
+          onBulkComplete(selectedTaskIds);
+          handleClearSelection();
+        }}
+        onBulkPriority={(priority) => {
+          onBulkPriority(priority);
+          handleClearSelection();
+        }}
+        onBulkDueDate={() => setShowBulkDueDateModal(true)}
+        onBulkAssignee={() => setShowBulkAssigneeModal(true)}
+        onBulkMove={() => setShowBulkMoveModal(true)}
+      />
+
+      {/* Bulk Modals */}
+      <BulkAssigneeModal
+        isOpen={showBulkAssigneeModal}
+        selectedTaskIds={selectedTaskIds}
+        tasks={tasks}
+        plans={plans}
+        accessToken={accessToken}
+        onClose={() => {
+          setShowBulkAssigneeModal(false);
+          handleClearSelection();
+        }}
+        onAssign={onBulkAssignee}
+      />
+
+      <BulkMoveModal
+        isOpen={showBulkMoveModal}
+        selectedTaskIds={selectedTaskIds}
+        plans={plans}
+        buckets={buckets}
+        onClose={() => {
+          setShowBulkMoveModal(false);
+          handleClearSelection();
+        }}
+        onMove={onBulkMove}
+      />
+
+      <BulkDueDateModal
+        isOpen={showBulkDueDateModal}
+        selectedTaskIds={selectedTaskIds}
+        onClose={() => {
+          setShowBulkDueDateModal(false);
+          handleClearSelection();
+        }}
+        onSetDueDate={onBulkDueDate}
+      />
     </div>
   );
 }

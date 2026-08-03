@@ -16,6 +16,33 @@ A living document to track features, improvements, and changes we want to implem
   - Keyboard shortcut support (Ctrl/Cmd+F)
   - File: `src/components/tasks/FilterBar.jsx` or new search component
 
+- [ ] **Clear Priority Queue Button**
+  - One-click button to clear entire priority queue
+  - Confirmation dialog to prevent accidental clears
+  - Quick way to reset and rebuild queue from scratch
+  - Useful for weekly/daily planning sessions
+  - File: `src/components/tasks/PriorityQueue.jsx` or `src/features/planning/PlanningView.jsx`
+
+- [ ] **Create New Plan from UI**
+  - Ability to create new Microsoft Planner plans from TaskCommand
+  - Modal or form for plan creation with name and description
+  - Automatically adds user as plan owner
+  - Plan appears in plan selection dropdowns immediately
+  - Files: New modal component, backend API endpoint for plan creation
+
+- [ ] **Personal Tasks (Not Attached to Plans)**
+  - Create tasks that are personal and not associated with any plan
+  - Mirrors Microsoft Planner's personal task functionality
+  - Visible only to the individual user (not on Manager Dashboard)
+  - Appears in Personal Task List alongside plan-based tasks
+  - Separate section or filter to distinguish personal vs plan tasks
+  - Use Microsoft Graph API's personal tasks endpoint (not Planner tasks)
+  - Files:
+    - `src/components/tasks/NewTaskModal.jsx` - Add "Personal Task" option
+    - Backend API endpoints for Microsoft To Do / personal tasks
+    - `src/hooks/useTasks.js` - Fetch and merge personal tasks with plan tasks
+    - `src/features/dashboards/manager/ManagerDashboard.jsx` - Exclude personal tasks from company view
+
 - [ ] **Real-time sync with Microsoft Planner**
   - Ensure all changes reflect immediately in Planner
   - Bidirectional updates (changes in Planner show in TaskCommand)
@@ -37,20 +64,33 @@ A living document to track features, improvements, and changes we want to implem
   - Scheduled recurrence (daily, weekly, monthly, yearly)
   - End after X occurrences option
   - End on Y date option
+  - **Better recurring task handling**
+    - Improved UI/UX for creating and managing recurring tasks
+    - Visual indicators for recurring vs one-time tasks
+    - Bulk edit capabilities for recurring task series
+    - Skip or reschedule individual instances without affecting series
 
 - [ ] **Task templates**
   - Pre-built checklists for common workflows
   - Quick-start templates for standard processes
 
 - [ ] **Display all task details on hover**
-  - Quick preview tooltip with task information
+  - Quick preview tooltip with task information on Main Page and Manager Dashboard
   - No need to click to see basic details
   - Include: title, due date, priority, checklist progress, assignees
+  - **Note:** Already implemented on Planning Page with 1-second hover delay
+  - Need to add to Personal Tasks (All Tasks List) and Manager Dashboard table
 
 ### Collaboration Features
-- [ ] **Comments/notes on tasks**
-  - Team communication within tasks
-  - @mentions to notify team members
+- [x] **Comments/notes on tasks** ✅ *Partially Completed 2025-11-12*
+  - View and post comments on tasks via Edit Task Modal
+  - Comments sync with Microsoft Planner conversation threads
+  - Real-time comment display with author and timestamp
+  - Success/error feedback when posting comments
+  - **Limitation:** First comment on a task must be created in Planner (Microsoft Graph API limitation - conversationThreadId is read-only)
+  - **Files:** `src/components/tasks/TaskComments.jsx`, `backend/services/commentService.js`
+  - [ ] @mentions to notify team members - *Pending*
+  - [ ] Make comments section collapsible and collapsed by default - Reduce visual clutter in Edit Task Modal
 
 - [ ] **Task assignment**
   - Delegate tasks to team members
@@ -76,6 +116,23 @@ A living document to track features, improvements, and changes we want to implem
 - [ ] **Break reminders**
   - Prevent burnout during focus sessions
   - Configurable reminder intervals
+
+- [x] **Focus session check-ins** ✅ *Completed 2025-11-06*
+  - Reminder modal at customizable intervals asking if still working on current task
+  - User-configurable interval (5, 10, 15, 20, 25, 30, 45, 60, 90, 120 minutes)
+  - Settings page dropdown to change reminder frequency
+  - Preference persists to localStorage
+  - Option to continue, switch tasks, or take a break
+  - Helps maintain focus and prevents getting stuck
+  - Tracks actual time spent on tasks
+  - Files: `src/App.jsx`, `src/features/settings/Settings.jsx`, `src/components/modals/FocusReminderModal.jsx`
+
+- [ ] **Task progress logging without completion**
+  - Track progress on tasks that have action but aren't fully complete yet
+  - Ability to log partial work (e.g., "50% done", "researched options", "drafted outline")
+  - Progress notes or percentage tracking
+  - Helps visualize momentum on long-running tasks
+  - Consider integration with checklist completion percentage
 
 - [ ] **Tags/labels**
   - Categorize tasks beyond just priority
@@ -196,6 +253,11 @@ A living document to track features, improvements, and changes we want to implem
   - Forward emails to create tasks automatically
   - Attach email content as task notes
 
+- [ ] **Email to update task**
+  - Forward emails to update existing tasks
+  - Could use task ID in subject line or reply to task notification email
+  - Update description, add comments, or modify task properties via email
+
 ### Reports & Analytics
 - [ ] **Reports Page**
   - Analytics and insights on task completion
@@ -239,13 +301,14 @@ A living document to track features, improvements, and changes we want to implem
   - Update any task property (assignees, dates, priority, etc.)
 
 ### Settings & Configuration
-- [ ] **Settings Page**
+- [x] **Settings Page** ✅ *Partially Completed*
   - User preferences and configurations
-  - **Manage integrations** (Slack, etc.)
-  - Notification settings
-  - Display preferences
-  - Theme customization
-  - Default views
+  - **Manage integrations** (Slack, etc.) ✅ *Completed 2025-10-29*
+  - Notification settings ✅ *Slack notifications completed 2025-10-30*
+  - Display preferences - *Pending*
+  - **Theme customization** ✅ *Completed 2025-11-06*
+  - Default views - *Pending*
+  - [ ] **Profile photo upload** - User can upload custom profile photo instead of initials
 
 - [ ] **Notification preferences**
   - Choose which notifications to receive
@@ -274,6 +337,45 @@ A living document to track features, improvements, and changes we want to implem
   - Files: New dashboard management system, saved to localStorage or backend
 
 ### UI/UX Improvements
+- [x] **Multi-Select Date Range Filters** ✅ *Completed 2025-11-07*
+  - Replaced single-select date dropdown with multi-select filter allowing multiple date ranges simultaneously
+  - Available options: All, Overdue, Today, Tomorrow, This Week, Next Week, Backlogged (No Due Date), Custom Range
+  - Uses OR logic: tasks matching ANY selected range are displayed
+  - Custom date range option with start/end date pickers integrated into the multi-select dropdown
+  - Applied to both Manager Dashboard and Planning Page for consistent filtering experience
+  - **Implementation:** New `DateRangeMultiSelect` component with checkbox-based multi-selection
+  - **Files:**
+    - `src/components/tasks/DateRangeMultiSelect.jsx` - Reusable multi-select component
+    - `src/utils/dateFilters.js` - Filter logic utility function
+    - `src/features/dashboards/manager/ManagerDashboard.jsx` - Manager Dashboard integration
+    - `src/features/planning/PlanningView.jsx` - Planning Page integration
+  - [ ] **Enhancement:** Add combined "Today + Overdue" preset option for one-click selection of both ranges
+
+- [ ] **More prominent loading graphic on main page**
+  - Current loading state may be too subtle at initial login
+  - Users may think app is frozen during task load
+  - Add larger, more visible loading indicator
+  - Consider animated spinner, skeleton screens, or progress indicator
+  - Show loading message (e.g., "Loading your tasks...", "Syncing with Microsoft Planner...")
+  - Files: `src/App.jsx`, main page components
+
+- [ ] **Multi-step planning interface**
+  - Consider breaking Planning page into guided steps
+  - Step 1: Review weekly goals
+  - Step 2: Browse and filter available tasks
+  - Step 3: Build priority queue
+  - Step 4: Confirm and start day
+  - Benefits: Reduces cognitive load, provides clear workflow
+  - Question: Is this too structured or does it help with focus?
+  - Files: `src/features/planning/PlanningView.jsx`
+
+- [x] **Fix Today's Wins Daily Goal Cards** ✅ *Completed 2025-11-12*
+  - **Completion Blocks Card:** Now shows actual progress "X of Y" for morning and afternoon goals with checkmarks when met
+  - **Daily Progress Card:** Renamed from "Goal Streaks", now shows task completion percentage and focus time percentage with visual indicators
+  - Trophy and TrendingUp icons turn green when goals are achieved
+  - All four cards now display real data with accurate goal tracking
+  - Files: `src/features/dashboards/personal/TodaysWins.jsx`
+
 - [x] **Logo as Home Button** ✅ *Completed 2025-10-31*
   - Clicking on logo banner navigates back to Personal Tasks
   - Standard web convention for navigation
@@ -385,11 +487,12 @@ A living document to track features, improvements, and changes we want to implem
    - **Impact:** Information available on demand without cluttering the view
    - Files: `src/features/planning/PlanningView.jsx:395-525`
 
-8. **Smart Date Filtering** ✅ *Implemented 2025-11-01*
-   - Quick options (Overdue, Today, This Week) for common needs
-   - Custom range for specific planning
-   - **Impact:** Helps narrow overwhelming task list quickly
-   - Files: `src/features/planning/PlanningView.jsx:282-350`
+8. **Smart Date Filtering** ✅ *Enhanced 2025-11-07 with Multi-Select*
+   - Multi-select date range filtering (All, Overdue, Today, Tomorrow, This Week, Next Week, Backlogged)
+   - Custom date range for specific planning needs
+   - Checkbox-based UI allows selecting multiple date ranges simultaneously
+   - **Impact:** Powerful filtering capability to narrow overwhelming task list quickly with flexible combinations
+   - Files: `src/components/tasks/DateRangeMultiSelect.jsx`, `src/utils/dateFilters.js`
 
 9. **Focus Task Card**
    - Single task prominence at the top is excellent for attention management
@@ -575,6 +678,15 @@ A living document to track features, improvements, and changes we want to implem
   - Educational and reassuring
 
 ### Mobile & Access
+- [ ] **Mobile Device Responsiveness**
+  - Optimize UI for mobile phones and tablets
+  - Responsive layouts that adapt to smaller screens
+  - Touch-friendly buttons and interaction areas
+  - Collapsible sections to maximize screen space
+  - Mobile-friendly navigation and menus
+  - Test on iOS and Android devices
+  - Files: All components need responsive breakpoints (Tailwind CSS responsive classes)
+
 - [ ] **Progressive Web App (PWA)**
   - Use TaskCommand on mobile devices
   - Offline capability
@@ -589,16 +701,71 @@ A living document to track features, improvements, and changes we want to implem
 ## 🐛 Known Issues / Bug Fixes
 
 ### UI/UX Issues
-- [ ] **Refresh button position inconsistent**
-  - Refresh button moves around depending on which page is active
-  - Should have consistent position across all views
-  - File: `src/components/layout/Header.jsx`
+- [x] **Refresh button position inconsistent** ✅ *Completed 2025-11-06*
+  - **Issue:** Refresh button moved around depending on which page was active
+  - **Fix:** Consistent positioning across all views
+  - **File:** `src/components/layout/Header.jsx`
+
+- [x] **Goal setting page displaying as UTC on cards** ✅ *Completed 2025-11-06*
+  - **Issue:** Time displays on goal cards were showing in UTC instead of user's local timezone
+  - **Fix:** Added work hour time display to Planning page weekly summary cards with proper 12-hour formatting
+  - **Implementation:** Times now display in user-friendly 12-hour format (e.g., "9:00 AM - 5:00 PM") on each day card
+  - **File:** `src/features/planning/PlanningView.jsx` (lines 395-415)
+
+- [x] **Slack logo on settings page looks bad** ✅ *Completed 2025-11-06*
+  - **Issue:** Slack logo used monochrome styling instead of official brand colors
+  - **Fix:** Replaced with official Slack logo featuring brand colors (red, cyan, green, yellow)
+  - **Implementation:** Updated SVG icon and removed color overrides to display official branding
+  - **Files:** `src/components/ui/icons.jsx` (lines 279-294), `src/features/settings/Settings.jsx` (lines 1052-1062)
+
+- [x] **Replace browser dropdowns with custom styled dropdowns** ✅ *Completed 2025-11-06*
+  - **Issue:** Many dropdowns used browser's native select element causing inconsistent UI styling
+  - **Fix:** Created reusable custom dropdown component and replaced all native selects throughout app
+  - **Implementation:** Theme dropdown, Priority, Plan, Bucket, Assignee, Status, and filter dropdowns now use custom styling
+  - **Files:** `src/components/tasks/FilterBar.jsx`, `src/components/tasks/NewTaskModal.jsx`, `src/components/tasks/EditTaskModal.jsx`, `src/features/dashboards/manager/ManagerDashboard.jsx`
+
+- [x] **After bulk action, tasks are remaining selected** ✅ *Completed 2025-11-07*
+  - **Issue:** After performing bulk operations (date change, move, assignee), task checkboxes remain selected
+  - **Fix:** Changed all bulk operations to clear ALL selections instead of only removing successful tasks
+  - **Implementation:**
+    - App.jsx: Replaced partial selection clearing with `setSelectedTaskIds(new Set())` in all 5 bulk handlers
+    - Planning Page: Added `handleClearSelection()` calls after all bulk operations (complete, priority) and modal closures (assignee, move, dueDate)
+  - **Files:**
+    - `src/App.jsx` (lines 670, 721, 785, 854, 911)
+    - `src/features/planning/PlanningView.jsx` (lines 1330-1337, 1344-1371)
+
+- [ ] **Focus Task Reminder alert not capturing focus on the tab**
+  - **Issue:** When focus timer reminder alert appears, it doesn't automatically bring the TaskCommand tab to focus
+  - **Expected:** Alert should capture user attention by bringing tab to foreground or showing prominent browser notification
+  - **Current Behavior:** Alert dialog appears but tab may remain in background
+  - **Potential Solutions:** Use browser Notification API with permission request, or implement more prominent in-app modal that auto-focuses
+  - **Files:** Focus timer component (needs investigation)
+
+- [ ] **Remove New Task and Refresh buttons from Manager Dashboard**
+  - **Issue:** Manager Dashboard has "New Task" and "Refresh" buttons in the header that may not be necessary or could be relocated
+  - **Current Behavior:** Buttons appear in dashboard header alongside other controls
+  - **Consideration:** Determine if these actions should be accessible from Manager Dashboard or if they clutter the interface
+  - **Files:** Manager Dashboard component header section
+
+- [ ] **Manager Dashboard title too close to header**
+  - **Issue:** "Manager Dashboard" title has insufficient spacing from the header bar
+  - **Current Behavior:** Title appears cramped against header with minimal margin
+  - **Expected:** Better visual spacing between header and page title
+  - **Fix:** Add appropriate margin-top to dashboard title
+  - **Files:** `src/features/dashboards/manager/ManagerDashboard.jsx`
+
+- [ ] **Post Comment button stays gray until hover**
+  - **Issue:** "Post Comment" button on Edit Task Modal remains gray (disabled appearance) until mouse hovers over it
+  - **Current Behavior:** Button doesn't visually indicate it's enabled when text is typed in comment box
+  - **Expected:** Button should change to primary theme color immediately when comment box has content
+  - **Fix:** Update button styling to reflect enabled state based on comment text, not hover state
+  - **Files:** `src/components/tasks/TaskComments.jsx`
 
 
 ### Slack Integration - Under Monitoring
 - [ ] **Slack Morning Digest not sending consistently**
-  - **Status:** Tested successfully on 2025-10-31, working in manual tests
-  - **Issue:** May have intermittent issues, needs continued monitoring
+  - **Status:** Not working reliably in production
+  - **Issue:** Digest not being sent as expected
   - **Local Testing:** Timer triggers don't fire automatically in local Azure Functions dev
   - **Test Endpoint:** `POST http://localhost:7071/api/test/morning-digest` with `{"azureUserId": "your-id"}`
   - **Production:** Should fire daily at 8:00 AM (`0 0 8 * * *`)
@@ -612,8 +779,8 @@ A living document to track features, improvements, and changes we want to implem
   - **Files:** `backend/index.js:1077-1090`, `backend/services/morningDigestService.js`
 
 - [ ] **Slack Assignment Notifications not sending consistently**
-  - **Status:** Tested successfully on 2025-10-31, sent 32 notifications successfully
-  - **Issue:** Have worked in testing before, needs continued monitoring for reliability
+  - **Status:** Not working reliably in production
+  - **Issue:** Assignment notifications not being sent as expected
   - **Local Testing:** Timer triggers don't fire automatically in local Azure Functions dev
   - **Test Endpoint:** `POST http://localhost:7071/api/test/assignment-check` with `{"azureUserId": "your-id"}`
   - **Production:** Should fire every 10 minutes (`0 */10 * * * *`)
@@ -1254,6 +1421,121 @@ A living document to track features, improvements, and changes we want to implem
     - `src/components/tasks/AllTasksList.jsx`
   - **Result:** More tasks visible on screen, reduced visual clutter, cleaner interface
 
+#### UI/UX Improvements (2025-11-06)
+
+- [x] **Today's Wins Collapse Behavior** ✅ *Completed 2025-11-06*
+  - **Issue:** When collapsed, component disappeared and was replaced with centered "Show Today's Wins" button
+  - **Fix:** Header and chevron button now stay in same position when toggling collapse
+  - **Features:**
+    - Chevron reverses direction (down when collapsed, up when expanded)
+    - Only content (gray bar and metric cards) collapses/expands
+    - Smooth inline collapse without layout shift
+    - Component always renders, just hides content when collapsed
+  - **Files Modified:**
+    - `src/features/dashboards/personal/TodaysWins.jsx` - Added isCollapsed prop, conditional content rendering
+    - `src/App.jsx:1254-1259` - Simplified to always render TodaysWins with isCollapsed state
+  - **Result:** Clean collapse interaction that keeps UI stable and predictable
+
+- [x] **Multi-Select Repositioning** ✅ *Completed 2025-11-06*
+  - **Issue:** Multi-select checkboxes and bulk actions on main page contradicted "execution mode" design intent
+  - **Reasoning:** Main page is for working on decided tasks, Planning page is for organizing and making decisions
+  - **Changes:**
+    - Removed multi-select checkboxes from All Tasks list on main page
+    - Removed global BulkActionsBar from App.jsx
+    - Added multi-select to Planning page with full bulk operations support
+    - Added checkboxes to each task row in Planning view
+    - BulkActionsBar and all bulk modals now render within PlanningView
+  - **Features:**
+    - Multi-select available in Planning page (for organization/planning)
+    - Multi-select available in Manager Dashboard (for team management)
+    - Main page stays focused on execution without bulk editing distractions
+  - **Files Modified:**
+    - `src/App.jsx:1348-1350, 1475-1509` - Removed multi-select props and global BulkActionsBar
+    - `src/components/tasks/AllTasksList.jsx:17-19, 79, 137, 164-177` - Removed checkboxes and selection handling
+    - `src/features/planning/PlanningView.jsx:3-6, 8-24, 31, 42-44, 174-188, 822-835, 1099-1135` - Added full multi-select with bulk operations
+  - **Result:** Clear separation between execution (main page) and planning modes
+
+#### Theme System (2025-11-06)
+
+- [x] **Multi-Theme Support** ✅ *Completed 2025-11-06*
+  - **Themes:** Pittsburgh (Black & Gold), FieldWorks (Green & Gray), Dallas (Navy & Silver), Kansas City (Red & Gold)
+  - **Features:**
+    - Full site-wide theme application (not just modals)
+    - Logo and wordmark update with theme changes
+    - Dynamic CSS variable injection via ThemeContext
+    - Theme selection persisted to localStorage
+    - Custom styled dropdown (not browser default)
+  - **Theme Definitions:**
+    - Pittsburgh: Yellow/Gold (#ffcc00) + Black (#030303)
+    - FieldWorks: Light blue-gray (#90a4ae) + Deep green (#2e7d32)
+    - Dallas: Silver (#c0c0c0) + Navy blue (#002f6c)
+    - Kansas City: Gold (#FFB81C) + Red (#E31837)
+  - **Files Created/Modified:**
+    - `src/constants/themes.js` - Theme definitions with colors and typography
+    - `src/contexts/ThemeContext.jsx` - Dynamic CSS variable injection
+    - `src/features/settings/Settings.jsx` - Custom theme dropdown with click-outside-to-close
+    - `src/components/brand/Logo.jsx` - Updated to use theme context
+    - `src/components/brand/TerminalIcon.jsx` - Updated to use theme context
+    - `src/components/layout/AppHeader.jsx` - Updated to use theme context
+    - `src/components/ui/TaskCommandLogo.jsx` - Changed from CSS class to inline styles
+    - `src/index.css` - CSS variables and gradient classes
+    - `src/main.jsx` - Wrapped App in ThemeProvider
+  - **Typography:**
+    - Poppins font family across all themes
+    - Added extrabold (800) weight for wordmark
+    - Consistent weight scale (400-800)
+  - **Result:** Complete theming system allowing users to customize visual appearance across entire application
+
+#### Manager Dashboard & UI Improvements (2025-11-12)
+
+- [x] **Manager Dashboard Bulk Actions** ✅ *Completed 2025-11-12*
+  - **Issue:** Bulk actions bar not appearing when selecting tasks on Manager Dashboard
+  - **Fix:** Added BulkActionsBar component and all bulk action modals to manager view
+  - **Features:**
+    - BulkActionsBar appears when tasks are selected
+    - Bulk complete multiple tasks
+    - Bulk priority updates
+    - Bulk due date changes (modal)
+    - Bulk assignee updates (modal)
+    - Bulk move to different plans/buckets (modal)
+  - **Files Modified:**
+    - `src/App.jsx:1358-1369` - Added BulkActionsBar to manager view
+    - `src/App.jsx:1458-1493` - Added bulk action modals
+  - **Result:** Full bulk editing capability on Manager Dashboard matching Personal Tasks functionality
+
+- [x] **Task Comments Improvements** ✅ *Completed 2025-11-12*
+  - **Issue 1:** No feedback when posting a comment (looked like it didn't work but it did)
+  - **Fix:** Added success message banner with auto-dismiss after 3 seconds
+  - **Issue 2:** Error when trying to post first comment on a task (conversationThreadId required)
+  - **Fix:** Backend now attempts to create conversation thread automatically
+  - **Known Limitation:** Microsoft Graph API has read-only conversationThreadId, so first comment must still be created in Planner
+  - **Features:**
+    - Green success banner when comment posts successfully
+    - Red error banner with helpful messages for failures
+    - Auto-dismiss success messages after 3 seconds
+  - **Files Modified:**
+    - `src/components/tasks/TaskComments.jsx` - Added success state and UI feedback
+    - `backend/services/commentService.js` - Added automatic conversation thread creation attempt
+  - **Result:** Clear feedback on comment actions, better user experience
+
+- [x] **Today's Wins Card Fixes** ✅ *Completed 2025-11-12*
+  - **Issue:** Two of four daily goal cards showing incorrect or placeholder data
+  - **Completion Blocks Card Fix:**
+    - Was showing hardcoded text ("Killing it!", "Still time!")
+    - Now shows actual progress: "Morning: X of Y tasks" and "Afternoon: X of Y tasks"
+    - Trophy icon turns green when both goals are achieved
+    - Checkmarks appear when individual goals are met
+  - **Goal Streaks/Daily Progress Card Fix:**
+    - Was called "Goal Streaks" and showed same streak value for both metrics
+    - Renamed to "Daily Progress" for clarity
+    - Now shows task completion percentage: "Tasks: X% (completed/goal)"
+    - Now shows focus time percentage: "Focus: X% (minutes/goal)"
+    - TrendingUp icon turns green when either goal is met
+    - Checkmarks appear when goals are 100%+
+  - **Files Modified:**
+    - `src/features/dashboards/personal/TodaysWins.jsx:319-371`
+  - **Result:** All four daily goal cards now display accurate real-time data with proper goal tracking
+
 ---
 
 ## 📝 Notes
@@ -1322,7 +1604,7 @@ Need to establish consistent terminology across codebase and documentation:
 
 ---
 
-**Last Updated:** 2025-10-31
+**Last Updated:** 2025-11-12
 
 ---
 

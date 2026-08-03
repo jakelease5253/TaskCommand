@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Calendar } from '../ui/icons';
+import { useTheme } from '../../contexts/ThemeContext';
 
 export default function BulkDueDateModal({
   isOpen,
@@ -7,18 +8,20 @@ export default function BulkDueDateModal({
   onClose,
   onSetDueDate
 }) {
+  const { theme } = useTheme();
+  const colors = theme.colors;
   const [selectedDate, setSelectedDate] = useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (selectedDate) {
-      onSetDueDate(selectedDate);
+      onSetDueDate(selectedTaskIds, selectedDate);
       onClose();
     }
   };
 
   const handleClearDueDate = () => {
-    onSetDueDate(null);
+    onSetDueDate(selectedTaskIds, null);
     onClose();
   };
 
@@ -30,25 +33,74 @@ export default function BulkDueDateModal({
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
-        <div className="flex items-center justify-between p-6 border-b border-slate-200">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-900">Set Due Date</h2>
-            <p className="text-sm text-slate-600 mt-1">
-              Setting due date for {selectedTaskIds.size} task{selectedTaskIds.size > 1 ? 's' : ''}
-            </p>
+        {/* Header */}
+        <div style={{
+          padding: '24px',
+          borderBottom: `2px solid ${colors.primary}`,
+          backgroundColor: colors.primaryDark
+        }}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '12px',
+                backgroundColor: colors.primary,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Calendar size={24} style={{ color: colors.primaryDark }} />
+              </div>
+              <div>
+                <h2 style={{
+                  fontSize: '20px',
+                  fontWeight: '600',
+                  fontFamily: 'Poppins',
+                  color: colors.primary,
+                  margin: 0
+                }}>Set Due Date</h2>
+                <p style={{
+                  fontSize: '12px',
+                  fontFamily: 'Poppins',
+                  color: colors.primary,
+                  margin: 0,
+                  marginTop: '2px'
+                }}>
+                  Setting due date for {selectedTaskIds.size} task{selectedTaskIds.size > 1 ? 's' : ''}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                padding: '8px',
+                backgroundColor: colors.primary,
+                borderRadius: '8px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <X style={{ color: colors.primaryDark }} />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5 text-slate-600" />
-          </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} style={{ padding: '24px' }}>
           {/* Date Selection */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+          <div style={{ marginBottom: '24px' }}>
+            <label style={{
+              display: 'block',
+              fontSize: '14px',
+              fontWeight: '500',
+              fontFamily: 'Poppins',
+              color: colors.text,
+              marginBottom: '8px'
+            }}>
               Select Due Date
             </label>
             <input
@@ -56,33 +108,96 @@ export default function BulkDueDateModal({
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
               min={today}
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              style={{
+                width: '100%',
+                padding: '12px',
+                border: `1px solid ${colors.border}`,
+                borderRadius: '8px',
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                outline: 'none'
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = colors.primary;
+                e.target.style.boxShadow = `0 0 0 2px ${colors.primary}33`;
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = colors.border;
+                e.target.style.boxShadow = 'none';
+              }}
             />
-            <p className="text-xs text-slate-500 mt-2">
+            <p style={{
+              fontSize: '12px',
+              fontFamily: 'Poppins',
+              color: colors.textSecondary,
+              marginTop: '8px',
+              margin: 0
+            }}>
               Leave empty and click "Clear Due Date" to remove due dates
             </p>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-3 pt-4">
+          <div style={{ display: 'flex', gap: '12px' }}>
             <button
               type="button"
               onClick={handleClearDueDate}
-              className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+              style={{
+                flex: 1,
+                padding: '10px 16px',
+                border: `1px solid ${colors.border}`,
+                backgroundColor: 'white',
+                color: colors.text,
+                borderRadius: '8px',
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s'
+              }}
+              onMouseOver={(e) => e.target.style.backgroundColor = colors.backgroundSecondary}
+              onMouseOut={(e) => e.target.style.backgroundColor = 'white'}
             >
               Clear Due Date
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+              style={{
+                padding: '10px 16px',
+                border: `1px solid ${colors.border}`,
+                backgroundColor: 'white',
+                color: colors.text,
+                borderRadius: '8px',
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s'
+              }}
+              onMouseOver={(e) => e.target.style.backgroundColor = colors.backgroundSecondary}
+              onMouseOut={(e) => e.target.style.backgroundColor = 'white'}
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!selectedDate}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                padding: '10px 24px',
+                backgroundColor: selectedDate ? colors.primaryDark : colors.disabled,
+                color: selectedDate ? colors.primary : colors.textLight,
+                border: 'none',
+                borderRadius: '8px',
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: selectedDate ? 'pointer' : 'not-allowed',
+                transition: 'opacity 0.2s',
+                opacity: selectedDate ? 1 : 0.6
+              }}
+              onMouseOver={(e) => { if (selectedDate) e.target.style.opacity = '0.9'; }}
+              onMouseOut={(e) => { if (selectedDate) e.target.style.opacity = '1'; }}
             >
               Set Date
             </button>

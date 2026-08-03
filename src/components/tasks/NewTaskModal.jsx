@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { X, AlertCircle } from "../ui/icons";
 import ChecklistEditor from "./ChecklistEditor";
+import CustomDropdown from "../ui/CustomDropdown";
 
 export default function NewTaskModal({
   accessToken,
@@ -17,6 +18,27 @@ export default function NewTaskModal({
   const [planMembers, setPlanMembers] = useState([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [checklist, setChecklist] = useState({});
+
+  // Dropdown states
+  const [planDropdownOpen, setPlanDropdownOpen] = useState(false);
+  const [bucketDropdownOpen, setBucketDropdownOpen] = useState(false);
+  const [assigneeDropdownOpen, setAssigneeDropdownOpen] = useState(false);
+  const [priorityDropdownOpen, setPriorityDropdownOpen] = useState(false);
+
+  // Dropdown refs for click-outside detection
+  const planDropdownRef = useRef(null);
+  const bucketDropdownRef = useRef(null);
+  const assigneeDropdownRef = useRef(null);
+  const priorityDropdownRef = useRef(null);
+
+  // Additional state for bucket dropdown
+  const [selectedBucketId, setSelectedBucketId] = useState('');
+
+  // Additional state for assignee dropdown
+  const [selectedAssignee, setSelectedAssignee] = useState(currentUserId || '');
+
+  // Additional state for priority dropdown
+  const [selectedPriority, setSelectedPriority] = useState('5');
 
   // Update available buckets when plan changes
   useEffect(() => {
@@ -61,6 +83,27 @@ export default function NewTaskModal({
     }
   };
 
+  // Click-outside handler for dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (planDropdownRef.current && !planDropdownRef.current.contains(event.target)) {
+        setPlanDropdownOpen(false);
+      }
+      if (bucketDropdownRef.current && !bucketDropdownRef.current.contains(event.target)) {
+        setBucketDropdownOpen(false);
+      }
+      if (assigneeDropdownRef.current && !assigneeDropdownRef.current.contains(event.target)) {
+        setAssigneeDropdownOpen(false);
+      }
+      if (priorityDropdownRef.current && !priorityDropdownRef.current.contains(event.target)) {
+        setPriorityDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -69,11 +112,13 @@ export default function NewTaskModal({
     const formData = new FormData(e.target);
     const title = formData.get('title');
     const description = formData.get('description');
-    const planId = formData.get('planId');
-    const bucketId = formData.get('bucketId');
     const dueDate = formData.get('dueDate');
-    const priority = parseInt(formData.get('priority'));
-    const assignedToUserId = formData.get('assignedTo');
+
+    // Use state values for dropdowns
+    const planId = selectedPlanId;
+    const bucketId = selectedBucketId;
+    const priority = parseInt(selectedPriority);
+    const assignedToUserId = selectedAssignee;
 
     try {
       // Create task
@@ -287,27 +332,22 @@ export default function NewTaskModal({
                 color: 'var(--theme-primary-dark)',
                 marginBottom: '8px'
               }}>Plan *</label>
-              <select
-                name="planId"
+              <CustomDropdown
                 value={selectedPlanId}
-                onChange={(e) => setSelectedPlanId(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '8px',
-                  fontFamily: 'Poppins',
-                  fontSize: '14px',
-                  outline: 'none',
-                  cursor: 'pointer'
+                options={[
+                  { label: 'Select a plan', value: '' },
+                  ...Object.entries(plans).map(([id, name]) => ({ label: name, value: id }))
+                ]}
+                onChange={(value) => {
+                  setSelectedPlanId(value);
+                  setSelectedBucketId(''); // Reset bucket when plan changes
                 }}
-                required
-              >
-                <option value="">Select a plan</option>
-                {Object.entries(plans).map(([id, name]) => (
-                  <option key={id} value={id}>{name}</option>
-                ))}
-              </select>
+                disabled={false}
+                dropdownRef={planDropdownRef}
+                isOpen={planDropdownOpen}
+                setIsOpen={setPlanDropdownOpen}
+                width="100%"
+              />
             </div>
 
             <div>
@@ -319,25 +359,19 @@ export default function NewTaskModal({
                 color: 'var(--theme-primary-dark)',
                 marginBottom: '8px'
               }}>Bucket</label>
-              <select
-                name="bucketId"
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '8px',
-                  fontFamily: 'Poppins',
-                  fontSize: '14px',
-                  outline: 'none',
-                  cursor: 'pointer'
-                }}
+              <CustomDropdown
+                value={selectedBucketId}
+                options={[
+                  { label: 'Select a bucket (optional)', value: '' },
+                  ...availableBuckets.map((bucket) => ({ label: bucket.name, value: bucket.id }))
+                ]}
+                onChange={(value) => setSelectedBucketId(value)}
                 disabled={!selectedPlanId}
-              >
-                <option value="">Select a bucket (optional)</option>
-                {availableBuckets.map((bucket) => (
-                  <option key={bucket.id} value={bucket.id}>{bucket.name}</option>
-                ))}
-              </select>
+                dropdownRef={bucketDropdownRef}
+                isOpen={bucketDropdownOpen}
+                setIsOpen={setBucketDropdownOpen}
+                width="100%"
+              />
             </div>
           </div>
 
@@ -350,28 +384,22 @@ export default function NewTaskModal({
               color: 'var(--theme-primary-dark)',
               marginBottom: '8px'
             }}>Assign To</label>
-            <select
-              name="assignedTo"
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: '1px solid #d1d5db',
-                borderRadius: '8px',
-                fontFamily: 'Poppins',
-                fontSize: '14px',
-                outline: 'none',
-                cursor: 'pointer'
-              }}
+            <CustomDropdown
+              value={selectedAssignee}
+              options={[
+                { label: 'Unassigned', value: '' },
+                ...planMembers.map((member) => ({
+                  label: member.displayName || member.userPrincipalName,
+                  value: member.id
+                }))
+              ]}
+              onChange={(value) => setSelectedAssignee(value)}
               disabled={!selectedPlanId || loadingMembers}
-              defaultValue={currentUserId || ""}
-            >
-              <option value="">Unassigned</option>
-              {planMembers.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.displayName || member.userPrincipalName}
-                </option>
-              ))}
-            </select>
+              dropdownRef={assigneeDropdownRef}
+              isOpen={assigneeDropdownOpen}
+              setIsOpen={setAssigneeDropdownOpen}
+              width="100%"
+            />
             {loadingMembers && (
               <p style={{
                 fontSize: '12px',
@@ -417,25 +445,21 @@ export default function NewTaskModal({
                 color: 'var(--theme-primary-dark)',
                 marginBottom: '8px'
               }}>Priority</label>
-              <select
-                name="priority"
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '8px',
-                  fontFamily: 'Poppins',
-                  fontSize: '14px',
-                  outline: 'none',
-                  cursor: 'pointer'
-                }}
-                defaultValue="5"
-              >
-                <option value="1">Urgent</option>
-                <option value="3">Important</option>
-                <option value="5">Medium</option>
-                <option value="9">Low</option>
-              </select>
+              <CustomDropdown
+                value={selectedPriority}
+                options={[
+                  { label: 'Urgent', value: '1' },
+                  { label: 'Important', value: '3' },
+                  { label: 'Medium', value: '5' },
+                  { label: 'Low', value: '9' }
+                ]}
+                onChange={(value) => setSelectedPriority(value)}
+                disabled={false}
+                dropdownRef={priorityDropdownRef}
+                isOpen={priorityDropdownOpen}
+                setIsOpen={setPriorityDropdownOpen}
+                width="100%"
+              />
             </div>
           </div>
 

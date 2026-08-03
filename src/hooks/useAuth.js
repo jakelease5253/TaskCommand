@@ -8,7 +8,7 @@ const MSAL_CONFIG = {
     redirectUri: REDIRECT_URI
   }
 };
-const GRAPH_SCOPES = (import.meta.env.VITE_GRAPH_SCOPES || 'Tasks.ReadWrite,Group.Read.All,User.Read').split(',');
+const GRAPH_SCOPES = (import.meta.env.VITE_GRAPH_SCOPES || 'Tasks.ReadWrite,Group.ReadWrite.All,User.Read').split(',');
 
 export function useAuth() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);

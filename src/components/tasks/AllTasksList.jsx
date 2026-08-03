@@ -14,9 +14,7 @@ export default function AllTasksList({
   priorityTaskIds,
   loading,
   isCollapsed = false,
-  selectedTaskIds = new Set(),
   onToggleCollapse,
-  onToggleSelection,
   onNewTask,
   onSetFocus,
   onEdit,
@@ -75,8 +73,6 @@ export default function AllTasksList({
       </div>
     );
   }
-
-  const hasSelections = selectedTaskIds.size > 0;
 
   return (
     <div>
@@ -138,7 +134,7 @@ export default function AllTasksList({
           <p className="text-slate-600">Loading tasks...</p>
         </div>
       ) : (
-        <div className="space-y-3" style={{ marginBottom: hasSelections ? '80px' : '16px' }}>
+        <div className="space-y-3" style={{ marginBottom: '16px' }}>
           {tasks.map((task) => {
             const isInPriority = priorityTaskIds.includes(task.id);
             
@@ -161,21 +157,6 @@ export default function AllTasksList({
                   opacity: isInPriority ? 0.5 : 1
                 }}
               >
-                {/* Selection Checkbox */}
-                <div style={{ flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-                  <input
-                    type="checkbox"
-                    checked={selectedTaskIds.has(task.id)}
-                    onChange={() => onToggleSelection && onToggleSelection(task.id)}
-                    style={{
-                      width: '20px',
-                      height: '20px',
-                      cursor: 'pointer'
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </div>
-
                 {/* Task Content */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {/* Task Title with Badge */}

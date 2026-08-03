@@ -1,14 +1,21 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { X, AlertCircle } from "../ui/icons";
 import ChecklistEditor from "./ChecklistEditor";
+import CustomDropdown from "../ui/CustomDropdown";
+import TaskComments from "./TaskComments";
 
 export default function EditTaskModal({
   task,
   accessToken,
   plans,
   buckets,
+  priorityQueue = [],
+  focusTask = null,
   onClose,
   onTaskUpdated,
+  onAddToPriorityQueue,
+  onRemoveFromPriorityQueue,
+  onSetFocus,
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -22,6 +29,31 @@ export default function EditTaskModal({
   const [users, setUsers] = useState([]);
   const [checklist, setChecklist] = useState({});
   const [originalChecklist, setOriginalChecklist] = useState({});
+
+  // Dropdown states
+  const [planDropdownOpen, setPlanDropdownOpen] = useState(false);
+  const [bucketDropdownOpen, setBucketDropdownOpen] = useState(false);
+  const [priorityDropdownOpen, setPriorityDropdownOpen] = useState(false);
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+
+  // Dropdown refs for click-outside detection
+  const planDropdownRef = useRef(null);
+  const bucketDropdownRef = useRef(null);
+  const priorityDropdownRef = useRef(null);
+  const statusDropdownRef = useRef(null);
+
+  // Additional state for dropdown values
+  const [selectedPriority, setSelectedPriority] = useState(task.priority || 5);
+  const [selectedStatus, setSelectedStatus] = useState(
+    task.percentComplete === 100 ? '100' : task.percentComplete > 0 ? '50' : '0'
+  );
+
+  // Check if task is in priority queue and get its position
+  const queueIndex = priorityQueue.findIndex(t => t.id === task.id);
+  const isInQueue = queueIndex !== -1;
+  const queuePosition = isInQueue ? queueIndex + 1 : null;
+  const isQueueFull = priorityQueue.length >= 10;
+  const isFocusTask = focusTask?.id === task.id;
 
   // Fetch the current task and details to get etags
   useEffect(() => {
@@ -85,6 +117,27 @@ export default function EditTaskModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task.id, accessToken]); // Only depend on task.id, not the entire task object
 
+  // Click-outside handler for dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (planDropdownRef.current && !planDropdownRef.current.contains(event.target)) {
+        setPlanDropdownOpen(false);
+      }
+      if (bucketDropdownRef.current && !bucketDropdownRef.current.contains(event.target)) {
+        setBucketDropdownOpen(false);
+      }
+      if (priorityDropdownRef.current && !priorityDropdownRef.current.contains(event.target)) {
+        setPriorityDropdownOpen(false);
+      }
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target)) {
+        setStatusDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   if (!task) return null;
 
   // Handle checklist changes (add, remove, edit, toggle)
@@ -101,9 +154,11 @@ export default function EditTaskModal({
     const formData = new FormData(e.target);
     const title = formData.get('title');
     const dueDate = formData.get('dueDate');
-    const priority = parseInt(formData.get('priority'));
-    const percentComplete = parseInt(formData.get('status'));
     const description = formData.get('description');
+
+    // Use state values for dropdowns
+    const priority = parseInt(selectedPriority);
+    const percentComplete = parseInt(selectedStatus);
 
     try {
       // Clean up assignments - remove read-only properties
@@ -426,6 +481,13 @@ export default function EditTaskModal({
             </div>
           </div>
 
+          {/* Comments Section */}
+          <div>
+            <div className="border border-slate-300 rounded-lg p-4 bg-slate-50">
+              <TaskComments task={task} />
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label style={{
@@ -438,28 +500,46 @@ export default function EditTaskModal({
               }}>
                 Plan *
               </label>
-              <select
+              <CustomDropdown
                 value={selectedPlanId}
-                onChange={handlePlanChange}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '8px',
-                  fontFamily: 'Poppins',
-                  fontSize: '14px',
-                  outline: 'none',
-                  cursor: 'pointer'
+                options={[
+                  { label: 'Select a plan', value: '' },
+                  ...plansArray.map(plan => ({ label: plan.title, value: plan.id }))
+                ]}
+                onChange={async (value) => {
+                  setSelectedPlanId(value);
+                  setSelectedBucketId(''); // Reset bucket when plan changes
+                  setAssignments({}); // Clear assignments when plan changes
+
+                  // Fetch users for the new plan
+                  if (value && accessToken) {
+                    try {
+                      const planResponse = await fetch(
+                        `https://graph.microsoft.com/v1.0/planner/plans/${value}`,
+                        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+                      );
+                      const planData = await planResponse.json();
+
+                      const membersResponse = await fetch(
+                        `https://graph.microsoft.com/v1.0/groups/${planData.owner}/members`,
+                        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+                      );
+                      const membersData = await membersResponse.json();
+                      setUsers(membersData.value || []);
+                    } catch (err) {
+                      console.error('Error fetching users for new plan:', err);
+                      setUsers([]);
+                    }
+                  } else {
+                    setUsers([]);
+                  }
                 }}
-                required
-              >
-                <option value="">Select a plan</option>
-                {plansArray.map(plan => (
-                  <option key={plan.id} value={plan.id}>
-                    {plan.title}
-                  </option>
-                ))}
-              </select>
+                disabled={false}
+                dropdownRef={planDropdownRef}
+                isOpen={planDropdownOpen}
+                setIsOpen={setPlanDropdownOpen}
+                width="100%"
+              />
             </div>
 
             <div>
@@ -473,28 +553,19 @@ export default function EditTaskModal({
               }}>
                 Bucket
               </label>
-              <select
+              <CustomDropdown
                 value={selectedBucketId}
-                onChange={(e) => setSelectedBucketId(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '8px',
-                  fontFamily: 'Poppins',
-                  fontSize: '14px',
-                  outline: 'none',
-                  cursor: 'pointer'
-                }}
+                options={[
+                  { label: 'Select a bucket (optional)', value: '' },
+                  ...filteredBuckets.map(bucket => ({ label: bucket.name, value: bucket.id }))
+                ]}
+                onChange={(value) => setSelectedBucketId(value)}
                 disabled={!selectedPlanId}
-              >
-                <option value="">Select a bucket (optional)</option>
-                {filteredBuckets.map(bucket => (
-                  <option key={bucket.id} value={bucket.id}>
-                    {bucket.name}
-                  </option>
-                ))}
-              </select>
+                dropdownRef={bucketDropdownRef}
+                isOpen={bucketDropdownOpen}
+                setIsOpen={setBucketDropdownOpen}
+                width="100%"
+              />
             </div>
           </div>
 
@@ -538,25 +609,21 @@ export default function EditTaskModal({
               }}>
                 Priority
               </label>
-              <select
-                name="priority"
-                defaultValue={task.priority || 5}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '8px',
-                  fontFamily: 'Poppins',
-                  fontSize: '14px',
-                  outline: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="1">Urgent</option>
-                <option value="3">Important</option>
-                <option value="5">Medium</option>
-                <option value="9">Low</option>
-              </select>
+              <CustomDropdown
+                value={selectedPriority.toString()}
+                options={[
+                  { label: 'Urgent', value: '1' },
+                  { label: 'Important', value: '3' },
+                  { label: 'Medium', value: '5' },
+                  { label: 'Low', value: '9' }
+                ]}
+                onChange={(value) => setSelectedPriority(parseInt(value))}
+                disabled={false}
+                dropdownRef={priorityDropdownRef}
+                isOpen={priorityDropdownOpen}
+                setIsOpen={setPriorityDropdownOpen}
+                width="100%"
+              />
             </div>
           </div>
 
@@ -571,24 +638,20 @@ export default function EditTaskModal({
             }}>
               Status
             </label>
-            <select
-              name="status"
-              defaultValue={task.percentComplete === 100 ? '100' : task.percentComplete > 0 ? '50' : '0'}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: '1px solid #d1d5db',
-                borderRadius: '8px',
-                fontFamily: 'Poppins',
-                fontSize: '14px',
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="0">Not Started</option>
-              <option value="50">In Progress</option>
-              <option value="100">Completed</option>
-            </select>
+            <CustomDropdown
+              value={selectedStatus}
+              options={[
+                { label: 'Not Started', value: '0' },
+                { label: 'In Progress', value: '50' },
+                { label: 'Completed', value: '100' }
+              ]}
+              onChange={(value) => setSelectedStatus(value)}
+              disabled={false}
+              dropdownRef={statusDropdownRef}
+              isOpen={statusDropdownOpen}
+              setIsOpen={setStatusDropdownOpen}
+              width="100%"
+            />
           </div>
 
           <div>
@@ -636,6 +699,143 @@ export default function EditTaskModal({
               )}
             </div>
           </div>
+
+          {/* Quick Actions Section */}
+          {(onAddToPriorityQueue || onSetFocus) && (
+            <div style={{
+              borderTop: '1px solid #e5e7eb',
+              paddingTop: '16px',
+              marginTop: '24px'
+            }}>
+              <div style={{
+                fontSize: '13px',
+                fontWeight: '600',
+                fontFamily: 'Poppins',
+                color: 'var(--theme-primary-dark)',
+                marginBottom: '12px'
+              }}>
+                Quick Actions
+              </div>
+              <div className="flex gap-3">
+                {/* Priority Queue Button */}
+                {onAddToPriorityQueue && (
+                  <div style={{ flex: 1 }}>
+                    {isInQueue ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onRemoveFromPriorityQueue(task.id);
+                          onClose();
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '10px 16px',
+                          border: '1px solid #f87171',
+                          color: '#dc2626',
+                          backgroundColor: '#ffffff',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontFamily: 'Poppins',
+                          fontWeight: '500',
+                          fontSize: '13px',
+                          transition: 'background-color 0.2s'
+                        }}
+                        onMouseOver={(e) => e.target.style.backgroundColor = '#fef2f2'}
+                        onMouseOut={(e) => e.target.style.backgroundColor = '#ffffff'}
+                      >
+                        ✓ In Queue (#{queuePosition})
+                      </button>
+                    ) : isQueueFull ? (
+                      <div style={{
+                        width: '100%',
+                        padding: '10px 16px',
+                        border: '1px solid #d1d5db',
+                        color: '#9ca3af',
+                        backgroundColor: '#f9fafb',
+                        borderRadius: '8px',
+                        fontFamily: 'Poppins',
+                        fontWeight: '500',
+                        fontSize: '13px',
+                        textAlign: 'center',
+                        cursor: 'not-allowed'
+                      }}
+                      title="Priority Queue is full (10/10). Visit Planning to reorganize."
+                      >
+                        Queue Full
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onAddToPriorityQueue(task);
+                          onClose();
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '10px 16px',
+                          border: '1px solid var(--theme-primary)',
+                          color: 'var(--theme-primary-dark)',
+                          backgroundColor: '#ffffff',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontFamily: 'Poppins',
+                          fontWeight: '500',
+                          fontSize: '13px',
+                          transition: 'background-color 0.2s'
+                        }}
+                        onMouseOver={(e) => e.target.style.backgroundColor = 'var(--theme-primary-light)'}
+                        onMouseOut={(e) => e.target.style.backgroundColor = '#ffffff'}
+                      >
+                        + Add to Queue
+                      </button>
+                    )}
+                    {isQueueFull && !isInQueue && (
+                      <div style={{
+                        fontSize: '11px',
+                        fontFamily: 'Poppins',
+                        color: '#6b7280',
+                        marginTop: '4px',
+                        textAlign: 'center'
+                      }}>
+                        Visit Planning to reorganize
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Set Focus Button */}
+                {onSetFocus && (
+                  <div style={{ flex: 1 }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSetFocus(task);
+                        onClose();
+                      }}
+                      disabled={isFocusTask}
+                      style={{
+                        width: '100%',
+                        padding: '10px 16px',
+                        border: isFocusTask ? '1px solid #10b981' : '1px solid var(--theme-primary)',
+                        color: isFocusTask ? '#059669' : 'var(--theme-primary-dark)',
+                        backgroundColor: isFocusTask ? '#d1fae5' : '#ffffff',
+                        borderRadius: '8px',
+                        cursor: isFocusTask ? 'default' : 'pointer',
+                        fontFamily: 'Poppins',
+                        fontWeight: '500',
+                        fontSize: '13px',
+                        transition: 'background-color 0.2s'
+                      }}
+                      onMouseOver={(e) => !isFocusTask && (e.target.style.backgroundColor = 'var(--theme-primary-light)')}
+                      onMouseOut={(e) => !isFocusTask && (e.target.style.backgroundColor = '#ffffff')}
+                    >
+                      {isFocusTask ? '✓ Current Focus' : '🎯 Set Focus'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-3 pt-6">
             <button

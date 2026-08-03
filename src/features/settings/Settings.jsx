@@ -3,7 +3,7 @@ import { Slack, Link, Unlink, Bell, AlertCircle, Check, ChevronDown } from "../.
 import { useTheme } from "../../contexts/ThemeContext";
 import { themes } from "../../constants/themes";
 
-export default function Settings({ accessToken, user }) {
+export default function Settings({ accessToken, user, focusReminderInterval, setFocusReminderInterval }) {
   const [slackConnection, setSlackConnection] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -16,20 +16,75 @@ export default function Settings({ accessToken, user }) {
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
   const themeDropdownRef = useRef(null);
 
+  // Custom dropdown states
+  const [timezoneDropdownOpen, setTimezoneDropdownOpen] = useState(false);
+  const [morningTimeDropdownOpen, setMorningTimeDropdownOpen] = useState(false);
+  const [kudosTimeDropdownOpen, setKudosTimeDropdownOpen] = useState(false);
+  const [weeklyDayDropdownOpen, setWeeklyDayDropdownOpen] = useState(false);
+  const [weeklyTimeDropdownOpen, setWeeklyTimeDropdownOpen] = useState(false);
+  const [digestGroupingDropdownOpen, setDigestGroupingDropdownOpen] = useState(false);
+  const [channelTypeDropdownOpen, setChannelTypeDropdownOpen] = useState(false);
+  const [planDropdownOpen, setPlanDropdownOpen] = useState(false);
+  const [bucketDropdownOpen, setBucketDropdownOpen] = useState(false);
+  const [focusReminderDropdownOpen, setFocusReminderDropdownOpen] = useState(false);
+
+  const timezoneDropdownRef = useRef(null);
+  const morningTimeDropdownRef = useRef(null);
+  const kudosTimeDropdownRef = useRef(null);
+  const weeklyDayDropdownRef = useRef(null);
+  const weeklyTimeDropdownRef = useRef(null);
+  const digestGroupingDropdownRef = useRef(null);
+  const channelTypeDropdownRef = useRef(null);
+  const planDropdownRef = useRef(null);
+  const bucketDropdownRef = useRef(null);
+  const focusReminderDropdownRef = useRef(null);
+
   // Default Plan Selection states
   const [availablePlans, setAvailablePlans] = useState([]);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [selectedBucket, setSelectedBucket] = useState(null);
   const [plansLoading, setPlansLoading] = useState(false);
 
-  // Backend URL - use environment variable or default
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:7071';
+  // Backend URL - TEMPORARILY HARDCODED for Slack OAuth
+  // TODO: Fix environment variable loading issue
+  const backendUrl = 'https://taskcommand.ngrok.app';
+  console.log('Using hardcoded backend URL:', backendUrl);
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (themeDropdownRef.current && !themeDropdownRef.current.contains(event.target)) {
         setThemeDropdownOpen(false);
+      }
+      if (timezoneDropdownRef.current && !timezoneDropdownRef.current.contains(event.target)) {
+        setTimezoneDropdownOpen(false);
+      }
+      if (morningTimeDropdownRef.current && !morningTimeDropdownRef.current.contains(event.target)) {
+        setMorningTimeDropdownOpen(false);
+      }
+      if (kudosTimeDropdownRef.current && !kudosTimeDropdownRef.current.contains(event.target)) {
+        setKudosTimeDropdownOpen(false);
+      }
+      if (weeklyDayDropdownRef.current && !weeklyDayDropdownRef.current.contains(event.target)) {
+        setWeeklyDayDropdownOpen(false);
+      }
+      if (weeklyTimeDropdownRef.current && !weeklyTimeDropdownRef.current.contains(event.target)) {
+        setWeeklyTimeDropdownOpen(false);
+      }
+      if (digestGroupingDropdownRef.current && !digestGroupingDropdownRef.current.contains(event.target)) {
+        setDigestGroupingDropdownOpen(false);
+      }
+      if (channelTypeDropdownRef.current && !channelTypeDropdownRef.current.contains(event.target)) {
+        setChannelTypeDropdownOpen(false);
+      }
+      if (planDropdownRef.current && !planDropdownRef.current.contains(event.target)) {
+        setPlanDropdownOpen(false);
+      }
+      if (bucketDropdownRef.current && !bucketDropdownRef.current.contains(event.target)) {
+        setBucketDropdownOpen(false);
+      }
+      if (focusReminderDropdownRef.current && !focusReminderDropdownRef.current.contains(event.target)) {
+        setFocusReminderDropdownOpen(false);
       }
     };
 
@@ -64,8 +119,14 @@ export default function Settings({ accessToken, user }) {
   }, [accessToken]);
 
   const checkSlackConnection = async () => {
+    console.log('checkSlackConnection called');
+    console.log('accessToken:', accessToken ? `${accessToken.substring(0, 50)}...` : 'undefined');
+    console.log('user:', user);
+
     if (!accessToken || !user) {
+      console.log('No accessToken or user - setting connection to false');
       setLoading(false);
+      setSlackConnection({ connected: false });
       return;
     }
 
@@ -218,6 +279,145 @@ export default function Settings({ accessToken, user }) {
     setPreferences(updated);
     handleUpdatePreferences(updated);
   };
+
+  // Custom Dropdown Component
+  const CustomDropdown = ({
+    value,
+    options,
+    onChange,
+    disabled,
+    dropdownRef,
+    isOpen,
+    setIsOpen,
+    renderOption = (option) => option.label || option,
+    renderValue = (option) => option.label || option,
+    getOptionValue = (option) => option.value || option
+  }) => {
+    const selectedOption = options.find(opt => getOptionValue(opt) === value) || options[0];
+
+    return (
+      <div ref={dropdownRef} style={{ position: 'relative', display: 'inline-block' }}>
+        <button
+          type="button"
+          onClick={() => !disabled && setIsOpen(!isOpen)}
+          disabled={disabled}
+          style={{
+            padding: '6px 12px',
+            border: '1px solid #d1d5db',
+            borderRadius: '8px',
+            fontFamily: 'Poppins',
+            fontSize: '14px',
+            outline: 'none',
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            backgroundColor: disabled ? '#f3f4f6' : '#ffffff',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '8px',
+            minWidth: '120px',
+            color: theme.colors.primaryDark,
+          }}
+        >
+          <span>{renderValue(selectedOption)}</span>
+          <ChevronDown style={{
+            transition: 'transform 0.2s',
+            transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+            width: '16px',
+            height: '16px'
+          }} />
+        </button>
+
+        {isOpen && !disabled && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              marginTop: '4px',
+              backgroundColor: '#ffffff',
+              border: '1px solid #d1d5db',
+              borderRadius: '8px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+              zIndex: 1000,
+              overflow: 'hidden',
+              minWidth: '100%',
+              maxHeight: '300px',
+              overflowY: 'auto'
+            }}
+          >
+            {options.map((option, index) => {
+              const optionValue = getOptionValue(option);
+              const isSelected = optionValue === value;
+
+              return (
+                <button
+                  key={index}
+                  type="button"
+                  onClick={() => {
+                    onChange(optionValue);
+                    setIsOpen(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    border: 'none',
+                    backgroundColor: isSelected ? theme.colors.primaryLight : '#ffffff',
+                    fontFamily: 'Poppins',
+                    fontSize: '14px',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    color: theme.colors.primaryDark,
+                    transition: 'background-color 0.15s',
+                    whiteSpace: 'nowrap'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) {
+                      e.target.style.backgroundColor = '#f8fafc';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) {
+                      e.target.style.backgroundColor = '#ffffff';
+                    }
+                  }}
+                >
+                  {renderOption(option)}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Dropdown options arrays
+  const timezoneOptions = [
+    { label: 'Eastern Time (ET)', value: 'America/New_York' },
+    { label: 'Central Time (CT)', value: 'America/Chicago' },
+    { label: 'Mountain Time (MT)', value: 'America/Denver' },
+    { label: 'Arizona Time (MST)', value: 'America/Phoenix' },
+    { label: 'Pacific Time (PT)', value: 'America/Los_Angeles' },
+    { label: 'Alaska Time (AKT)', value: 'America/Anchorage' },
+    { label: 'Hawaii Time (HST)', value: 'Pacific/Honolulu' },
+    { label: 'London (GMT/BST)', value: 'Europe/London' },
+    { label: 'Paris (CET/CEST)', value: 'Europe/Paris' },
+    { label: 'Tokyo (JST)', value: 'Asia/Tokyo' },
+    { label: 'Sydney (AEDT/AEST)', value: 'Australia/Sydney' },
+    { label: 'UTC', value: 'UTC' }
+  ];
+
+  const timeOptions = Array.from({ length: 24 }, (_, i) => {
+    const hour = i.toString().padStart(2, '0');
+    const time = `${hour}:00`;
+    const displayHour = i === 0 ? 12 : i > 12 ? i - 12 : i;
+    const ampm = i < 12 ? 'AM' : 'PM';
+    return { label: `${displayHour}:00 ${ampm}`, value: time };
+  });
+
+  const weekdayOptions = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+  ];
 
   const fetchAvailablePlans = async () => {
     try {
@@ -487,30 +687,24 @@ export default function Settings({ accessToken, user }) {
                     }}>
                       Plan
                     </label>
-                    <select
+                    <CustomDropdown
                       value={selectedPlan || ''}
-                      onChange={(e) => {
-                        setSelectedPlan(e.target.value);
+                      options={[
+                        { label: 'Select a plan...', value: '' },
+                        ...availablePlans.map(plan => ({
+                          label: `${plan.planName} (${plan.groupName})`,
+                          value: plan.planId
+                        }))
+                      ]}
+                      onChange={(value) => {
+                        setSelectedPlan(value);
                         setSelectedBucket(null); // Reset bucket when plan changes
                       }}
-                      style={{
-                        width: '100%',
-                        padding: '8px 12px',
-                        border: '1px solid #d1d5db',
-                        borderRadius: '8px',
-                        fontFamily: 'Poppins',
-                        fontSize: '14px',
-                        outline: 'none',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <option value="">Select a plan...</option>
-                      {availablePlans.map(plan => (
-                        <option key={plan.planId} value={plan.planId}>
-                          {plan.planName} ({plan.groupName})
-                        </option>
-                      ))}
-                    </select>
+                      disabled={false}
+                      dropdownRef={planDropdownRef}
+                      isOpen={planDropdownOpen}
+                      setIsOpen={setPlanDropdownOpen}
+                    />
                   </div>
 
                   {/* Bucket Selector - Only show when plan is selected */}
@@ -526,30 +720,23 @@ export default function Settings({ accessToken, user }) {
                       }}>
                         Bucket
                       </label>
-                      <select
+                      <CustomDropdown
                         value={selectedBucket || ''}
-                        onChange={(e) => setSelectedBucket(e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '8px 12px',
-                          border: '1px solid #d1d5db',
-                          borderRadius: '8px',
-                          fontFamily: 'Poppins',
-                          fontSize: '14px',
-                          outline: 'none',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <option value="">Select a bucket...</option>
-                        {availablePlans
-                          .find(p => p.planId === selectedPlan)
-                          ?.buckets.map(bucket => (
-                            <option key={bucket.bucketId} value={bucket.bucketId}>
-                              {bucket.bucketName}
-                            </option>
-                          ))
-                        }
-                      </select>
+                        options={[
+                          { label: 'Select a bucket...', value: '' },
+                          ...(availablePlans
+                            .find(p => p.planId === selectedPlan)
+                            ?.buckets.map(bucket => ({
+                              label: bucket.bucketName,
+                              value: bucket.bucketId
+                            })) || [])
+                        ]}
+                        onChange={(value) => setSelectedBucket(value)}
+                        disabled={false}
+                        dropdownRef={bucketDropdownRef}
+                        isOpen={bucketDropdownOpen}
+                        setIsOpen={setBucketDropdownOpen}
+                      />
                     </div>
                   )}
 
@@ -733,6 +920,139 @@ export default function Settings({ accessToken, user }) {
         </div>
       </div>
 
+      {/* Focus Reminder Interval Section */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+        <div className="flex items-start justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '8px',
+              backgroundColor: 'var(--theme-primary-dark)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <Bell size={24} style={{ color: 'var(--theme-primary)' }} />
+            </div>
+            <div>
+              <h2 style={{
+                fontSize: '24px',
+                fontWeight: '600',
+                fontFamily: 'Poppins',
+                color: 'var(--theme-primary-dark)',
+                margin: 0
+              }}>Focus Reminders</h2>
+              <p style={{
+                fontSize: '14px',
+                fontFamily: 'Poppins',
+                color: '#64748b',
+                margin: '4px 0 0 0'
+              }}>Get periodic check-ins while working on focus tasks</p>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label style={{
+            display: 'block',
+            fontSize: '13px',
+            fontWeight: '500',
+            fontFamily: 'Poppins',
+            color: 'var(--theme-primary-dark)',
+            marginBottom: '8px'
+          }}>Reminder Interval</label>
+          <div ref={focusReminderDropdownRef} style={{ position: 'relative', width: '100%', maxWidth: '400px' }}>
+            <button
+              type="button"
+              onClick={() => setFocusReminderDropdownOpen(!focusReminderDropdownOpen)}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                outline: 'none',
+                cursor: 'pointer',
+                backgroundColor: '#ffffff',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                color: theme.colors.primaryDark,
+              }}
+            >
+              <span>{focusReminderInterval} minutes</span>
+              <ChevronDown style={{
+                transition: 'transform 0.2s',
+                transform: focusReminderDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)'
+              }} />
+            </button>
+
+            {focusReminderDropdownOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  marginTop: '4px',
+                  backgroundColor: '#ffffff',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                  zIndex: 1000,
+                  overflow: 'hidden',
+                  maxHeight: '300px',
+                  overflowY: 'auto'
+                }}
+              >
+                {[5, 10, 15, 20, 25, 30, 45, 60, 90, 120].map((minutes) => (
+                  <button
+                    key={minutes}
+                    type="button"
+                    onClick={() => {
+                      setFocusReminderInterval(minutes);
+                      setFocusReminderDropdownOpen(false);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: 'none',
+                      backgroundColor: focusReminderInterval === minutes ? theme.colors.primaryLight : '#ffffff',
+                      fontFamily: 'Poppins',
+                      fontSize: '14px',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      color: theme.colors.primaryDark,
+                      transition: 'background-color 0.15s',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (focusReminderInterval !== minutes) {
+                        e.target.style.backgroundColor = '#f8fafc';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (focusReminderInterval !== minutes) {
+                        e.target.style.backgroundColor = '#ffffff';
+                      }
+                    }}
+                  >
+                    {minutes} minutes
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <p style={{
+            fontSize: '12px',
+            fontFamily: 'Poppins',
+            color: '#64748b',
+            marginTop: '8px'
+          }}>How often to check if you're still working on your focus task</p>
+        </div>
+      </div>
+
       {/* Slack Integration Section */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
         <div className="flex items-start justify-between mb-6">
@@ -741,12 +1061,13 @@ export default function Settings({ accessToken, user }) {
               width: '48px',
               height: '48px',
               borderRadius: '8px',
-              backgroundColor: 'var(--theme-primary)',
+              backgroundColor: '#ffffff',
+              border: '1px solid #e5e7eb',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              <Slack size={24} style={{ color: 'var(--theme-primary-dark)' }} />
+              <Slack size={32} />
             </div>
             <div>
               <h2 className="text-2xl font-bold text-slate-800">Slack Integration</h2>
@@ -854,6 +1175,23 @@ export default function Settings({ accessToken, user }) {
           </div>
 
           <div className="space-y-6">
+            {/* Timezone Setting */}
+            <div className="py-4 border-b border-slate-200">
+              <h4 className="font-medium text-slate-800 mb-2">Timezone</h4>
+              <p className="text-sm text-slate-600 mb-3">All notification times below are in your selected timezone</p>
+              <div className="ml-4 flex items-center gap-2">
+                <span className="text-sm text-slate-700">Select timezone:</span>
+                <CustomDropdown
+                  value={preferences.timezone || 'America/New_York'}
+                  options={timezoneOptions}
+                  onChange={(value) => updatePreferenceValue('timezone', value)}
+                  disabled={savingPreferences}
+                  dropdownRef={timezoneDropdownRef}
+                  isOpen={timezoneDropdownOpen}
+                  setIsOpen={setTimezoneDropdownOpen}
+                />
+              </div>            </div>
+
             {/* Assignment Notifications */}
             <div className="flex items-start justify-between py-4 border-b border-slate-200">
               <div>
@@ -927,17 +1265,17 @@ export default function Settings({ accessToken, user }) {
                 </button>
               </div>
               {preferences.morningDigestEnabled && (
-                <div className="ml-4">
-                  <label className="text-sm text-slate-700">
-                    Time:{' '}
-                    <input
-                      type="time"
-                      value={preferences.morningDigestTime || '08:00'}
-                      onChange={(e) => updatePreferenceValue('morningDigestTime', e.target.value)}
-                      disabled={savingPreferences}
-                      className="ml-2 px-3 py-1 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </label>
+                <div className="ml-4 flex items-center gap-2">
+                  <span className="text-sm text-slate-700">Time:</span>
+                  <CustomDropdown
+                    value={preferences.morningDigestTime || '08:00'}
+                    options={timeOptions}
+                    onChange={(value) => updatePreferenceValue('morningDigestTime', value)}
+                    disabled={savingPreferences}
+                    dropdownRef={morningTimeDropdownRef}
+                    isOpen={morningTimeDropdownOpen}
+                    setIsOpen={setMorningTimeDropdownOpen}
+                  />
                 </div>
               )}
             </div>
@@ -979,17 +1317,17 @@ export default function Settings({ accessToken, user }) {
                 </button>
               </div>
               {preferences.dailyKudosEnabled && (
-                <div className="ml-4">
-                  <label className="text-sm text-slate-700">
-                    Time:{' '}
-                    <input
-                      type="time"
-                      value={preferences.dailyKudosTime || '17:00'}
-                      onChange={(e) => updatePreferenceValue('dailyKudosTime', e.target.value)}
-                      disabled={savingPreferences}
-                      className="ml-2 px-3 py-1 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </label>
+                <div className="ml-4 flex items-center gap-2">
+                  <span className="text-sm text-slate-700">Time:</span>
+                  <CustomDropdown
+                    value={preferences.dailyKudosTime || '17:00'}
+                    options={timeOptions}
+                    onChange={(value) => updatePreferenceValue('dailyKudosTime', value)}
+                    disabled={savingPreferences}
+                    dropdownRef={kudosTimeDropdownRef}
+                    isOpen={kudosTimeDropdownOpen}
+                    setIsOpen={setKudosTimeDropdownOpen}
+                  />
                 </div>
               )}
             </div>
@@ -1031,34 +1369,31 @@ export default function Settings({ accessToken, user }) {
                 </button>
               </div>
               {preferences.weeklyDigestEnabled && (
-                <div className="ml-4 flex gap-4">
-                  <label className="text-sm text-slate-700">
-                    Day:{' '}
-                    <select
+                <div className="ml-4 flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-slate-700">Day:</span>
+                    <CustomDropdown
                       value={preferences.weeklyDigestDay || 'Friday'}
-                      onChange={(e) => updatePreferenceValue('weeklyDigestDay', e.target.value)}
+                      options={weekdayOptions}
+                      onChange={(value) => updatePreferenceValue('weeklyDigestDay', value)}
                       disabled={savingPreferences}
-                      className="ml-2 px-3 py-1 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    >
-                      <option>Monday</option>
-                      <option>Tuesday</option>
-                      <option>Wednesday</option>
-                      <option>Thursday</option>
-                      <option>Friday</option>
-                      <option>Saturday</option>
-                      <option>Sunday</option>
-                    </select>
-                  </label>
-                  <label className="text-sm text-slate-700">
-                    Time:{' '}
-                    <input
-                      type="time"
-                      value={preferences.weeklyDigestTime || '16:00'}
-                      onChange={(e) => updatePreferenceValue('weeklyDigestTime', e.target.value)}
-                      disabled={savingPreferences}
-                      className="ml-2 px-3 py-1 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      dropdownRef={weeklyDayDropdownRef}
+                      isOpen={weeklyDayDropdownOpen}
+                      setIsOpen={setWeeklyDayDropdownOpen}
                     />
-                  </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-slate-700">Time:</span>
+                    <CustomDropdown
+                      value={preferences.weeklyDigestTime || '16:00'}
+                      options={timeOptions}
+                      onChange={(value) => updatePreferenceValue('weeklyDigestTime', value)}
+                      disabled={savingPreferences}
+                      dropdownRef={weeklyTimeDropdownRef}
+                      isOpen={weeklyTimeDropdownOpen}
+                      setIsOpen={setWeeklyTimeDropdownOpen}
+                    />
+                  </div>
                 </div>
               )}
             </div>

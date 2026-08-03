@@ -2,9 +2,12 @@ import React from 'react';
 import Logo from '../brand/Logo';
 import TerminalIcon from '../brand/TerminalIcon';
 import BrandButton from '../brand/BrandButton';
-import { colors, typography, spacing, components } from '../../constants/theme';
+import { useTheme } from '../../contexts/ThemeContext';
 
 export default function LoginScreen({ onLogin, loading }) {
+  const { theme } = useTheme();
+  const colors = theme.colors;
+
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: colors.backgroundLight }}>
       <div
@@ -12,13 +15,13 @@ export default function LoginScreen({ onLogin, loading }) {
         style={{
           width: '703px',
           height: '470px',
-          backgroundColor: components.card.background,
-          borderRadius: components.card.borderRadius,
-          boxShadow: components.card.boxShadow,
+          backgroundColor: colors.background,
+          borderRadius: '16px',
+          boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.1)',
         }}
       >
         {/* Logo and Title - Horizontal */}
-        <div className="flex items-center" style={{ gap: spacing.lg, marginBottom: spacing.md }}>
+        <div className="flex items-center" style={{ gap: '24px', marginBottom: '16px' }}>
           <TerminalIcon size={60} />
           <Logo size="large" />
         </div>
@@ -26,12 +29,12 @@ export default function LoginScreen({ onLogin, loading }) {
         {/* Tagline */}
         <div
           style={{
-            color: colors.textPrimary,
-            fontSize: typography.sizes.xl,
-            fontFamily: typography.fontFamily,
-            lineHeight: typography.lineHeights.loose,
+            color: colors.text,
+            fontSize: '20px',
+            fontFamily: 'Poppins',
+            lineHeight: '1.6',
             textAlign: 'center',
-            margin: `0 0 ${spacing.gigantic} 0`,
+            margin: '0 0 48px 0',
           }}
         >
           Focus. Plan. Command your tasks.
@@ -50,12 +53,12 @@ export default function LoginScreen({ onLogin, loading }) {
         {/* Security Text */}
         <div
           style={{
-            color: colors.textPrimary,
-            fontSize: typography.sizes.xs,
-            fontFamily: typography.fontFamily,
-            lineHeight: typography.lineHeights.tight,
+            color: colors.textSecondary,
+            fontSize: '12px',
+            fontFamily: 'Poppins',
+            lineHeight: '1.4',
             textAlign: 'center',
-            marginTop: spacing.sm,
+            marginTop: '12px',
           }}
         >
           Secure Authentication via Microsoft

@@ -87,11 +87,16 @@ export default function PriorityQueue({
           </div>
           <h3 className="text-lg font-medium text-slate-800 mb-2">No Priority Tasks</h3>
           <p className="text-slate-600 text-sm">
-            Drag tasks from below to add them to your priority queue
+            Go to Planning to set your priority tasks
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div style={{
+          maxHeight: '280px',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          paddingRight: '4px'
+        }} className="space-y-3">
           {priorityTasks.map((task, index) => (
             <div
               key={task.id}

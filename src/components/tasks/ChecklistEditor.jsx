@@ -129,8 +129,8 @@ export default function ChecklistEditor({ checklist = {}, onChange, readOnly = f
         isChecked: !item.isChecked
       }
     };
-    // Clean entire checklist before calling onChange
-    onChange(cleanEntireChecklist(updatedChecklist));
+    // Clean entire checklist before calling onChange, preserving orderHints
+    onChange(cleanEntireChecklist(updatedChecklist, true));
   };
 
   // Handle editing item text
@@ -155,8 +155,8 @@ export default function ChecklistEditor({ checklist = {}, onChange, readOnly = f
         title: editingText.trim()
       }
     };
-    // Clean entire checklist before calling onChange
-    onChange(cleanEntireChecklist(updatedChecklist));
+    // Clean entire checklist before calling onChange, preserving orderHints
+    onChange(cleanEntireChecklist(updatedChecklist, true));
     setEditingItemId(null);
   };
 

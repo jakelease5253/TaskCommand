@@ -173,6 +173,122 @@ export const themes = {
         extrabold: '800',
       }
     }
+  },
+
+  kansasCity: {
+    id: 'kansasCity',
+    name: 'Kansas City',
+    colors: {
+      // Primary colors
+      primary: '#FFB81C',        // Gold
+      primaryDark: '#E31837',    // Red
+      primaryLight: '#fff4dc',   // Light gold tint
+
+      // Backgrounds
+      background: '#ffffff',
+      backgroundSecondary: '#f8fafc',
+
+      // Text
+      text: '#E31837',
+      textSecondary: '#64748b',
+      textLight: '#94a3b8',
+
+      // Borders
+      border: '#d1d5db',
+      borderLight: '#e5e7eb',
+
+      // Interactive states
+      hover: 'rgba(255, 184, 28, 0.9)',
+      active: '#e6a619',
+      disabled: '#94a3b8',
+
+      // Status colors
+      success: '#86efac',
+      error: '#dc2626',
+      warning: '#f59e0b',
+      info: '#3b82f6',
+
+      // Shadows
+      shadow: 'rgba(0, 0, 0, 0.08)',
+      shadowStrong: 'rgba(0, 0, 0, 0.15)',
+      shadowDark: 'rgba(0, 0, 0, 0.3)',
+    },
+    typography: {
+      fontFamily: 'Poppins',
+      sizes: {
+        xs: '12px',
+        sm: '13px',
+        base: '14px',
+        md: '15px',
+        lg: '18px',
+        xl: '24px',
+      },
+      weights: {
+        normal: '400',
+        medium: '500',
+        semibold: '600',
+        bold: '700',
+        extrabold: '800',
+      }
+    }
+  },
+
+  westVirginia: {
+    id: 'westVirginia',
+    name: 'West Virginia',
+    colors: {
+      // Primary colors
+      primary: '#EAAA00',        // Gold
+      primaryDark: '#002855',    // Navy blue
+      primaryLight: '#fef6e0',   // Light gold tint
+
+      // Backgrounds
+      background: '#ffffff',
+      backgroundSecondary: '#f8fafc',
+
+      // Text
+      text: '#002855',
+      textSecondary: '#64748b',
+      textLight: '#94a3b8',
+
+      // Borders
+      border: '#d1d5db',
+      borderLight: '#e5e7eb',
+
+      // Interactive states
+      hover: 'rgba(234, 170, 0, 0.9)',
+      active: '#d19900',
+      disabled: '#94a3b8',
+
+      // Status colors
+      success: '#86efac',
+      error: '#dc2626',
+      warning: '#f59e0b',
+      info: '#3b82f6',
+
+      // Shadows
+      shadow: 'rgba(0, 0, 0, 0.08)',
+      shadowStrong: 'rgba(0, 0, 0, 0.15)',
+      shadowDark: 'rgba(0, 0, 0, 0.3)',
+    },
+    typography: {
+      fontFamily: 'Poppins',
+      sizes: {
+        xs: '12px',
+        sm: '13px',
+        base: '14px',
+        md: '15px',
+        lg: '18px',
+        xl: '24px',
+      },
+      weights: {
+        normal: '400',
+        medium: '500',
+        semibold: '600',
+        bold: '700',
+        extrabold: '800',
+      }
+    }
   }
 };
 

@@ -14,8 +14,8 @@ import Insights from './features/insights/Insights';
 import Settings from './features/settings/Settings';
 import FocusTaskCard from './components/focus/FocusTaskCard';
 import FilterBar from './components/tasks/FilterBar';
-import AllTasksList from './components/tasks/AllTasksList';
 import PriorityQueue from './components/tasks/PriorityQueue';
+import TaskSearch from './components/tasks/TaskSearch';
 import BulkActionsBar from './components/tasks/BulkActionsBar';
 import NewTaskModal from './components/tasks/NewTaskModal';
 import EditTaskModal from './components/tasks/EditTaskModal';
@@ -24,6 +24,7 @@ import GoalSettingsModal from './components/modals/GoalSettingsModal';
 import BulkAssigneeModal from './components/modals/BulkAssigneeModal';
 import BulkMoveModal from './components/modals/BulkMoveModal';
 import BulkDueDateModal from './components/modals/BulkDueDateModal';
+import FocusReminderModal from './components/modals/FocusReminderModal';
 
 function App() {
   const auth = useAuth();
@@ -62,6 +63,10 @@ function App() {
   const [showBulkAssigneeModal, setShowBulkAssigneeModal] = useState(false);
   const [showBulkMoveModal, setShowBulkMoveModal] = useState(false);
   const [showBulkDueDateModal, setShowBulkDueDateModal] = useState(false);
+
+  // Focus reminder state
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [lastReminderTime, setLastReminderTime] = useState(null);
 
   // Multi-select for bulk operations
   const [selectedTaskIds, setSelectedTaskIds] = useState(new Set());
@@ -144,6 +149,12 @@ function App() {
     };
   });
 
+  // Focus reminder interval (in minutes)
+  const [focusReminderInterval, setFocusReminderInterval] = useState(() => {
+    const saved = localStorage.getItem('taskcommand_focus_reminder_interval');
+    return saved ? parseInt(saved) : 15; // Default to 15 minutes
+  });
+
   // Toast notifications
   const [toast, setToast] = useState(null);
 
@@ -183,6 +194,11 @@ function App() {
   useEffect(() => {
     localStorage.setItem('taskcommand_daily_goals', JSON.stringify(dailyGoals));
   }, [dailyGoals]);
+
+  // Save focus reminder interval to localStorage
+  useEffect(() => {
+    localStorage.setItem('taskcommand_focus_reminder_interval', focusReminderInterval.toString());
+  }, [focusReminderInterval]);
 
   // Save task focus times to localStorage whenever they change
   useEffect(() => {
@@ -302,6 +318,52 @@ function App() {
       localStorage.removeItem('focusTimerRunning');
     }
   }, [focusTask, focusTaskDetails, focusTimer.isRunning]);
+
+  // Focus reminder: Check every second if the configured interval has passed
+  useEffect(() => {
+    // Only run reminder checks if there's a focus task and timer is running
+    if (!focusTask || !focusTimer.isRunning) {
+      return;
+    }
+
+    const REMINDER_INTERVAL = focusReminderInterval * 60; // Convert minutes to seconds
+
+    const checkReminder = setInterval(() => {
+      const now = Date.now();
+
+      // If this is the first reminder check, set initial time
+      if (lastReminderTime === null) {
+        setLastReminderTime(now);
+        return;
+      }
+
+      // Calculate seconds since last reminder
+      const secondsSinceReminder = (now - lastReminderTime) / 1000;
+
+      // If the configured interval has passed, show the reminder
+      if (secondsSinceReminder >= REMINDER_INTERVAL) {
+        // Bring window to focus
+        window.focus();
+
+        // Show the reminder modal
+        setShowReminderModal(true);
+
+        // Update last reminder time
+        setLastReminderTime(now);
+      }
+    }, 1000); // Check every second
+
+    return () => clearInterval(checkReminder);
+  }, [focusTask, focusTimer.isRunning, lastReminderTime, focusReminderInterval]);
+
+  // Reset reminder timer when focus task changes
+  useEffect(() => {
+    if (focusTask) {
+      setLastReminderTime(Date.now());
+    } else {
+      setLastReminderTime(null);
+    }
+  }, [focusTask]);
 
   // Fetch user profile and tasks when authenticated
   useEffect(() => {
@@ -540,6 +602,27 @@ function App() {
     }, 800);
   };
 
+  // Focus Reminder Modal Handlers
+  const handleKeepGoing = () => {
+    // User confirms they're still working - reset the reminder timer
+    setLastReminderTime(Date.now());
+    setShowReminderModal(false);
+  };
+
+  const handleSwitchTask = () => {
+    // User wants to switch tasks - close modal and unfocus current task
+    setShowReminderModal(false);
+    if (focusTask) {
+      handleSetFocusTask(focusTask); // This will unfocus the current task
+    }
+  };
+
+  const handleTakeBreak = () => {
+    // User wants to take a break - pause timer and exit focus mode
+    setShowReminderModal(false);
+    focusTimer.pause();
+    setFocusMode(false);
+  };
 
   const handleEditTask = async (task) => {
     setEditingTask(task);
@@ -583,12 +666,8 @@ function App() {
         console.error(`Failed to complete task ${taskId}:`, err);
       }
     }
-    // Clear selection for successfully completed tasks
-    setSelectedTaskIds(prev => {
-      const newSet = new Set(prev);
-      successfulIds.forEach(id => newSet.delete(id));
-      return newSet;
-    });
+    // Clear all selections after bulk complete
+    setSelectedTaskIds(new Set());
 
     // Show success message
     if (successfulIds.length > 0) {
@@ -638,12 +717,8 @@ function App() {
     if (successfulIds.length > 0) {
       await taskManager.fetchAllTasks();
 
-      // Clear selection for successfully updated tasks
-      setSelectedTaskIds(prev => {
-        const newSet = new Set(prev);
-        successfulIds.forEach(id => newSet.delete(id));
-        return newSet;
-      });
+      // Clear all selections after bulk priority update
+      setSelectedTaskIds(new Set());
 
       const priorityNames = { 1: 'Urgent', 3: 'Important', 5: 'Medium', 9: 'Low' };
       showToast(`Updated priority to ${priorityNames[priority]} for ${successfulIds.length} task${successfulIds.length > 1 ? 's' : ''}`, 'success');
@@ -653,7 +728,7 @@ function App() {
     }
   };
 
-  const handleBulkDueDate = async (dateInput) => {
+  const handleBulkDueDate = async (taskIds, dateInput) => {
     let dueDateTime = null;
 
     // If dateInput is not null, convert to ISO format
@@ -668,7 +743,7 @@ function App() {
       }
     }
 
-    const idsArray = Array.from(selectedTaskIds);
+    const idsArray = Array.from(taskIds);
     const successfulIds = [];
 
     for (const taskId of idsArray) {
@@ -706,12 +781,8 @@ function App() {
     if (successfulIds.length > 0) {
       await taskManager.fetchAllTasks();
 
-      // Clear selection for successfully updated tasks
-      setSelectedTaskIds(prev => {
-        const newSet = new Set(prev);
-        successfulIds.forEach(id => newSet.delete(id));
-        return newSet;
-      });
+      // Clear all selections after bulk due date update
+      setSelectedTaskIds(new Set());
 
       const message = dueDateTime
         ? `Updated due date for ${successfulIds.length} task${successfulIds.length > 1 ? 's' : ''}`
@@ -723,8 +794,8 @@ function App() {
     }
   };
 
-  const handleBulkAssignee = async (selectedUserIds) => {
-    const idsArray = Array.from(selectedTaskIds);
+  const handleBulkAssignee = async (taskIds, selectedUserIds) => {
+    const idsArray = Array.from(taskIds);
     const successfulIds = [];
     const userIdsArray = Array.from(selectedUserIds);
 
@@ -779,12 +850,8 @@ function App() {
     if (successfulIds.length > 0) {
       await taskManager.fetchAllTasks();
 
-      // Clear selection for successfully updated tasks
-      setSelectedTaskIds(prev => {
-        const newSet = new Set(prev);
-        successfulIds.forEach(id => newSet.delete(id));
-        return newSet;
-      });
+      // Clear all selections after bulk assignee update
+      setSelectedTaskIds(new Set());
 
       if (userIdsArray.length === 0) {
         showToast(`Cleared assignees for ${successfulIds.length} task${successfulIds.length > 1 ? 's' : ''}`, 'success');
@@ -797,9 +864,9 @@ function App() {
     }
   };
 
-  const handleBulkMove = async (selectedPlanId, selectedBucketId) => {
+  const handleBulkMove = async (taskIds, selectedPlanId, selectedBucketId) => {
     const selectedPlanName = taskManager.plans[selectedPlanId];
-    const idsArray = Array.from(selectedTaskIds);
+    const idsArray = Array.from(taskIds);
     const successfulIds = [];
 
     for (const taskId of idsArray) {
@@ -840,12 +907,8 @@ function App() {
     if (successfulIds.length > 0) {
       await taskManager.fetchAllTasks();
 
-      // Clear selection for successfully moved tasks
-      setSelectedTaskIds(prev => {
-        const newSet = new Set(prev);
-        successfulIds.forEach(id => newSet.delete(id));
-        return newSet;
-      });
+      // Clear all selections after bulk move
+      setSelectedTaskIds(new Set());
 
       showToast(`Moved ${successfulIds.length} task${successfulIds.length > 1 ? 's' : ''} to ${selectedPlanName}`, 'success');
     }
@@ -856,7 +919,7 @@ function App() {
 
   // Priority Queue actions
   const addToPriorityQueue = (taskId) => {
-    if (priorityQueue.length >= 7) {
+    if (priorityQueue.length >= 10) {
       setShowPriorityLimitModal(true);
       return false;
     }
@@ -866,8 +929,20 @@ function App() {
     return true;
   };
 
+  const handleAddToPriorityQueue = (task) => {
+    const success = addToPriorityQueue(task.id);
+    if (success) {
+      showToast('Added to Priority Queue', 'success');
+    }
+  };
+
   const removeFromPriorityQueue = (taskId) => {
     setPriorityQueue(prev => prev.filter(id => id !== taskId));
+  };
+
+  const handleRemoveFromPriority = (taskId) => {
+    removeFromPriorityQueue(taskId);
+    showToast('Removed from Priority Queue', 'success');
   };
 
   const reorderPriorityQueue = (draggedTaskId, targetTaskId) => {
@@ -1168,25 +1243,13 @@ function App() {
         {!focusMode && currentView === 'personal' && (
           <div className={focusModeTransitioning ? 'focus-mode-exit' : ''}>
             {/* Collapsible Today's Wins */}
-            {showMetrics ? (
-              <TodaysWins
-                metrics={todaysWinsMetrics}
-                onToggleCollapse={() => setShowMetrics(false)}
-                onOpenSettings={() => setShowGoalSettingsModal(true)}
-              />
-            ) : (
-              <div className="mb-8 flex justify-center">
-                <button
-                  onClick={() => setShowMetrics(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-sm font-medium text-slate-700"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                  Show Today's Wins
-                </button>
-              </div>
-            )}
+            <TodaysWins
+              metrics={todaysWinsMetrics}
+              isCollapsed={!showMetrics}
+              onToggleCollapse={() => setShowMetrics(!showMetrics)}
+              onOpenSettings={() => setShowGoalSettingsModal(true)}
+              workHours={workHours}
+            />
 
             {focusTask && (
               <FocusTaskCard
@@ -1234,46 +1297,14 @@ function App() {
                 />
               </div>
 
-              {/* All Tasks Section - Full Width */}
+              {/* Search Section */}
               <div className="space-y-4">
-                <FilterBar
-                  sortBy={sortBy}
-                  setSortBy={setSortBy}
-                  filters={filters}
-                  setFilters={setFilters}
+                <TaskSearch
+                  tasks={taskManager.tasks}
                   plans={taskManager.plans}
-                  onClearFilters={() => setFilters({ priority: '', planId: '', dateRange: '', customStartDate: '', customEndDate: '' })}
+                  buckets={taskManager.buckets}
+                  onTaskSelect={handleEditTask}
                 />
-
-                <div
-                  onDragOver={(e) => { e.preventDefault(); }}
-                  onDrop={(e) => handleDrop(e, 'all')}
-                >
-                  <AllTasksList
-                    tasks={paginatedTasks}
-                    totalTasks={filteredTasks.length}
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    onPageChange={setCurrentPage}
-                    loading={taskManager.loading}
-                    plans={taskManager.plans}
-                    buckets={taskManager.buckets}
-                    userProfiles={taskManager.userProfiles}
-                    focusTask={focusTask}
-                    priorityTaskIds={priorityQueue}
-                    isCollapsed={allTasksCollapsed}
-                    selectedTaskIds={selectedTaskIds}
-                    onToggleCollapse={handleToggleAllTasksCollapse}
-                    onToggleSelection={handleToggleTaskSelection}
-                    onNewTask={() => setShowNewTaskModal(true)}
-                    onSetFocus={handleSetFocusTask}
-                    onEdit={handleEditTask}
-                    onComplete={handleCompleteTask}
-                    onDragStart={handleDragStart}
-                    onDragOver={handleDragOver}
-                    onDragEnd={handleDragEnd}
-                  />
-                </div>
               </div>
             </div>
           </div>
@@ -1284,6 +1315,7 @@ function App() {
           <PlanningView
             tasks={taskManager.tasks}
             plans={taskManager.plans}
+            buckets={taskManager.buckets}
             priorityQueue={priorityTasks}
             onUpdatePriorityQueue={handleUpdatePriorityQueueFromPlanning}
             userProfiles={taskManager.userProfiles}
@@ -1292,12 +1324,23 @@ function App() {
             workHours={workHours}
             dailyGoals={dailyGoals}
             onOpenGoalSettings={() => setShowGoalSettingsModal(true)}
+            onBulkComplete={handleBulkComplete}
+            onBulkPriority={handleBulkPriority}
+            onBulkDueDate={handleBulkDueDate}
+            onBulkAssignee={handleBulkAssignee}
+            onBulkMove={handleBulkMove}
           />
         )}
 
         {/* Insights View */}
         {currentView === 'insights' && (
-          <Insights />
+          <Insights
+            tasks={taskManager.tasks}
+            completedTasksHistory={completedTasksHistory}
+            priorityQueue={priorityTasks}
+            plans={taskManager.plans}
+            taskFocusTimes={taskFocusTimes}
+          />
         )}
 
         {/* Manager Dashboard View */}
@@ -1312,9 +1355,27 @@ function App() {
           />
         )}
 
+        {/* Bulk Actions Bar for Manager Dashboard */}
+        {currentView === 'manager' && selectedTaskIds.size > 0 && (
+          <BulkActionsBar
+            selectedCount={selectedTaskIds.size}
+            onClearSelection={handleClearSelection}
+            onBulkComplete={() => handleBulkComplete(selectedTaskIds)}
+            onBulkPriority={handleBulkPriority}
+            onBulkDueDate={() => setShowBulkDueDateModal(true)}
+            onBulkAssignee={() => setShowBulkAssigneeModal(true)}
+            onBulkMove={() => setShowBulkMoveModal(true)}
+          />
+        )}
+
         {/* Settings View */}
         {currentView === 'settings' && (
-          <Settings accessToken={auth.accessToken} user={auth.user} />
+          <Settings
+            accessToken={auth.accessToken}
+            user={auth.user}
+            focusReminderInterval={focusReminderInterval}
+            setFocusReminderInterval={setFocusReminderInterval}
+          />
         )}
       </main>
 
@@ -1334,11 +1395,16 @@ function App() {
       )}
 
       {editingTask && (
-        <EditTaskModal 
+        <EditTaskModal
           task={{...editingTask, description: editingTaskDetails?.description}}
           accessToken={auth.accessToken}
           plans={taskManager.plans}
           buckets={taskManager.buckets}
+          priorityQueue={priorityTasks}
+          focusTask={focusTask}
+          onAddToPriorityQueue={handleAddToPriorityQueue}
+          onRemoveFromPriorityQueue={handleRemoveFromPriority}
+          onSetFocus={handleSetFocusTask}
           onClose={() => {
             setEditingTask(null);
             setEditingTaskDetails(null);
@@ -1380,41 +1446,51 @@ function App() {
         }}
       />
 
-      <BulkActionsBar
-        selectedCount={selectedTaskIds.size}
-        onClearSelection={handleClearSelection}
-        onBulkComplete={() => handleBulkComplete(selectedTaskIds)}
-        onBulkPriority={handleBulkPriority}
-        onBulkDueDate={() => setShowBulkDueDateModal(true)}
-        onBulkAssignee={() => setShowBulkAssigneeModal(true)}
-        onBulkMove={() => setShowBulkMoveModal(true)}
+      {/* Focus Reminder Modal */}
+      <FocusReminderModal
+        isOpen={showReminderModal}
+        focusTask={focusTask}
+        onKeepGoing={handleKeepGoing}
+        onSwitchTask={handleSwitchTask}
+        onTakeBreak={handleTakeBreak}
       />
 
-      <BulkAssigneeModal
-        isOpen={showBulkAssigneeModal}
-        selectedTaskIds={selectedTaskIds}
-        tasks={taskManager.tasks}
-        plans={taskManager.plans}
-        accessToken={auth.accessToken}
-        onClose={() => setShowBulkAssigneeModal(false)}
-        onAssign={handleBulkAssignee}
-      />
+      {/* Bulk Action Modals */}
+      {showBulkAssigneeModal && (
+        <BulkAssigneeModal
+          isOpen={showBulkAssigneeModal}
+          onClose={() => setShowBulkAssigneeModal(false)}
+          onAssign={(userIds) => {
+            handleBulkAssignee(Array.from(selectedTaskIds), userIds);
+            setShowBulkAssigneeModal(false);
+          }}
+          accessToken={auth.accessToken}
+        />
+      )}
 
-      <BulkMoveModal
-        isOpen={showBulkMoveModal}
-        selectedTaskIds={selectedTaskIds}
-        plans={taskManager.plans}
-        buckets={taskManager.buckets}
-        onClose={() => setShowBulkMoveModal(false)}
-        onMove={handleBulkMove}
-      />
+      {showBulkMoveModal && (
+        <BulkMoveModal
+          isOpen={showBulkMoveModal}
+          onClose={() => setShowBulkMoveModal(false)}
+          onMove={(planId, bucketId) => {
+            handleBulkMove(Array.from(selectedTaskIds), planId, bucketId);
+            setShowBulkMoveModal(false);
+          }}
+          plans={taskManager.plans}
+          buckets={taskManager.buckets}
+        />
+      )}
 
-      <BulkDueDateModal
-        isOpen={showBulkDueDateModal}
-        selectedTaskIds={selectedTaskIds}
-        onClose={() => setShowBulkDueDateModal(false)}
-        onSetDueDate={handleBulkDueDate}
-      />
+      {showBulkDueDateModal && (
+        <BulkDueDateModal
+          isOpen={showBulkDueDateModal}
+          onClose={() => setShowBulkDueDateModal(false)}
+          onSetDueDate={(dateInput) => {
+            handleBulkDueDate(Array.from(selectedTaskIds), dateInput);
+            setShowBulkDueDateModal(false);
+          }}
+        />
+      )}
 
       {/* Toast Notification */}
       {toast && (

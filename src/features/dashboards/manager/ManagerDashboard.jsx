@@ -1,8 +1,12 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { AlertCircle, Users, Calendar, Target, TrendingUp, Archive, Search, X, ChevronUp, ChevronDown, RefreshCw, Plus } from "../../../components/ui/icons";
 import NewTaskModal from "../../../components/tasks/NewTaskModal";
+import DateRangeMultiSelect from "../../../components/tasks/DateRangeMultiSelect";
+import ThemedSelect from "../../../components/tasks/ThemedSelect";
+import { matchesDateRanges } from "../../../utils/dateFilters";
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:7071';
+// Temporarily hardcoded - same issue as Settings with env vars not loading
+const BACKEND_URL = 'https://taskcommand.ngrok.app';
 
 export default function ManagerDashboard({
   accessToken,
@@ -30,7 +34,7 @@ export default function ManagerDashboard({
   const [selectedAssignees, setSelectedAssignees] = useState([]);
   const [selectedPlans, setSelectedPlans] = useState([]);
   const [selectedStatuses, setSelectedStatuses] = useState([]);
-  const [dateRange, setDateRange] = useState('all'); // all, overdue, thisWeek, thisMonth, backlog, custom
+  const [selectedDateRanges, setSelectedDateRanges] = useState([]); // Array of: 'all', 'overdue', 'today', 'tomorrow', 'thisWeek', 'nextWeek', 'backlog'
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
 
@@ -253,43 +257,10 @@ export default function ManagerDashboard({
       });
     }
 
-    // Filter by date range
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-
-    if (dateRange !== 'all') {
-      filtered = filtered.filter(task => {
-        if (dateRange === 'backlog') {
-          return !task.dueDateTime;
-        }
-
-        if (!task.dueDateTime) return false;
-
-        const dueDate = new Date(task.dueDateTime);
-        dueDate.setHours(0, 0, 0, 0);
-
-        if (dateRange === 'overdue') {
-          return dueDate < now;
-        } else if (dateRange === 'thisWeek') {
-          const weekFromNow = new Date(now);
-          weekFromNow.setDate(weekFromNow.getDate() + 7);
-          return dueDate >= now && dueDate <= weekFromNow;
-        } else if (dateRange === 'thisMonth') {
-          const monthFromNow = new Date(now);
-          monthFromNow.setMonth(monthFromNow.getMonth() + 1);
-          return dueDate >= now && dueDate <= monthFromNow;
-        } else if (dateRange === 'custom') {
-          if (customStartDate && customEndDate) {
-            const startDate = new Date(customStartDate);
-            startDate.setHours(0, 0, 0, 0);
-            const endDate = new Date(customEndDate);
-            endDate.setHours(23, 59, 59, 999);
-            return dueDate >= startDate && dueDate <= endDate;
-          }
-        }
-        return true;
-      });
-    }
+    // Filter by date range (multi-select)
+    filtered = filtered.filter(task =>
+      matchesDateRanges(task, selectedDateRanges, customStartDate, customEndDate)
+    );
 
     // Apply sorting
     filtered.sort((a, b) => {
@@ -335,7 +306,7 @@ export default function ManagerDashboard({
     });
 
     return filtered;
-  }, [incompleteTasks, companyData, searchQuery, selectedAssignees, selectedPlans, selectedStatuses, dateRange, customStartDate, customEndDate, sortBy, sortDirection]);
+  }, [incompleteTasks, companyData, searchQuery, selectedAssignees, selectedPlans, selectedStatuses, selectedDateRanges, customStartDate, customEndDate, sortBy, sortDirection]);
 
   // Virtual scrolling: Calculate which tasks to render
   const visibleTasks = useMemo(() => {
@@ -361,7 +332,7 @@ export default function ManagerDashboard({
     setSelectedAssignees([]);
     setSelectedPlans([]);
     setSelectedStatuses([]);
-    setDateRange('all');
+    setSelectedDateRanges([]);
     setCustomStartDate('');
     setCustomEndDate('');
   };
@@ -391,7 +362,7 @@ export default function ManagerDashboard({
 
   const hasActiveFilters = searchQuery || selectedAssignees.length > 0 ||
                           selectedPlans.length > 0 || selectedStatuses.length > 0 ||
-                          dateRange !== 'all' || customStartDate || customEndDate;
+                          selectedDateRanges.length > 0 || customStartDate || customEndDate;
 
   // Handle task completion with optimistic updates
   const handleCompleteTask = async (taskId, event) => {
@@ -736,93 +707,16 @@ export default function ManagerDashboard({
         {/* Filter Chips */}
         <div className="flex flex-wrap gap-3">
           {/* Date Range Filter */}
-          <div className="flex items-center gap-2">
-            <span style={{ fontSize: '12px', fontWeight: '500', color: '#64748b', fontFamily: 'Poppins' }}>Date:</span>
-            <select
-              value={dateRange}
-              onChange={(e) => setDateRange(e.target.value)}
-              style={{
-                fontSize: '14px',
-                padding: '4px 12px',
-                border: '1px solid #d1d5db',
-                borderRadius: '8px',
-                outline: 'none',
-                fontFamily: 'Poppins',
-                cursor: 'pointer'
-              }}
-              onFocus={(e) => {
-                e.target.style.boxShadow = '0 0 0 2px var(--theme-primary)';
-                e.target.style.borderColor = 'transparent';
-              }}
-              onBlur={(e) => {
-                e.target.style.boxShadow = 'none';
-                e.target.style.borderColor = '#d1d5db';
-              }}
-            >
-              <option value="all">All</option>
-              <option value="overdue">Overdue</option>
-              <option value="thisWeek">This Week</option>
-              <option value="thisMonth">This Month</option>
-              <option value="backlog">Backlog</option>
-              <option value="custom">Custom Range</option>
-            </select>
-          </div>
-
-          {/* Custom Date Range Pickers */}
-          {dateRange === 'custom' && (
-            <>
-              <div className="flex items-center gap-2">
-                <span style={{ fontSize: '12px', fontWeight: '500', color: '#64748b', fontFamily: 'Poppins' }}>From:</span>
-                <input
-                  type="date"
-                  value={customStartDate}
-                  onChange={(e) => setCustomStartDate(e.target.value)}
-                  style={{
-                    fontSize: '14px',
-                    padding: '4px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '8px',
-                    outline: 'none',
-                    fontFamily: 'Poppins',
-                    cursor: 'pointer'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.boxShadow = '0 0 0 2px var(--theme-primary)';
-                    e.target.style.borderColor = 'transparent';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.boxShadow = 'none';
-                    e.target.style.borderColor = '#d1d5db';
-                  }}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <span style={{ fontSize: '12px', fontWeight: '500', color: '#64748b', fontFamily: 'Poppins' }}>To:</span>
-                <input
-                  type="date"
-                  value={customEndDate}
-                  onChange={(e) => setCustomEndDate(e.target.value)}
-                  style={{
-                    fontSize: '14px',
-                    padding: '4px 12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '8px',
-                    outline: 'none',
-                    fontFamily: 'Poppins',
-                    cursor: 'pointer'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.boxShadow = '0 0 0 2px var(--theme-primary)';
-                    e.target.style.borderColor = 'transparent';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.boxShadow = 'none';
-                    e.target.style.borderColor = '#d1d5db';
-                  }}
-                />
-              </div>
-            </>
-          )}
+          <DateRangeMultiSelect
+            selectedRanges={selectedDateRanges}
+            onChange={setSelectedDateRanges}
+            customStartDate={customStartDate}
+            customEndDate={customEndDate}
+            onCustomDateChange={(start, end) => {
+              setCustomStartDate(start);
+              setCustomEndDate(end);
+            }}
+          />
 
           {/* Status Filter */}
           <div className="flex items-center gap-2">
@@ -863,73 +757,37 @@ export default function ManagerDashboard({
 
           {/* Assignee Filter */}
           {uniqueAssignees.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span style={{ fontSize: '12px', fontWeight: '500', color: '#64748b', fontFamily: 'Poppins' }}>Assignee:</span>
-              <select
-                value=""
-                onChange={(e) => e.target.value && toggleFilter('assignee', e.target.value)}
-                style={{
-                  fontSize: '14px',
-                  padding: '4px 12px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '8px',
-                  outline: 'none',
-                  fontFamily: 'Poppins',
-                  cursor: 'pointer'
-                }}
-                onFocus={(e) => {
-                  e.target.style.boxShadow = '0 0 0 2px var(--theme-primary)';
-                  e.target.style.borderColor = 'transparent';
-                }}
-                onBlur={(e) => {
-                  e.target.style.boxShadow = 'none';
-                  e.target.style.borderColor = '#d1d5db';
-                }}
-              >
-                <option value="">Select assignee...</option>
-                <option value="__unassigned__">Unassigned</option>
-                {uniqueAssignees.map(userId => (
-                  <option key={userId} value={userId}>
-                    {companyData.userProfiles[userId] || 'User'}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <ThemedSelect
+              value=""
+              onChange={(value) => value && toggleFilter('assignee', value)}
+              options={[
+                { value: '', label: 'Select assignee...' },
+                { value: '__unassigned__', label: 'Unassigned' },
+                ...uniqueAssignees.map(userId => ({
+                  value: userId,
+                  label: companyData.userProfiles[userId] || 'User'
+                }))
+              ]}
+              placeholder="Select assignee..."
+              label="Assignee"
+            />
           )}
 
           {/* Plan Filter */}
           {uniquePlans.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span style={{ fontSize: '12px', fontWeight: '500', color: '#64748b', fontFamily: 'Poppins' }}>Plan:</span>
-              <select
-                value=""
-                onChange={(e) => e.target.value && toggleFilter('plan', e.target.value)}
-                style={{
-                  fontSize: '14px',
-                  padding: '4px 12px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '8px',
-                  outline: 'none',
-                  fontFamily: 'Poppins',
-                  cursor: 'pointer'
-                }}
-                onFocus={(e) => {
-                  e.target.style.boxShadow = '0 0 0 2px var(--theme-primary)';
-                  e.target.style.borderColor = 'transparent';
-                }}
-                onBlur={(e) => {
-                  e.target.style.boxShadow = 'none';
-                  e.target.style.borderColor = '#d1d5db';
-                }}
-              >
-                <option value="">Select plan...</option>
-                {uniquePlans.map(planId => (
-                  <option key={planId} value={planId}>
-                    {companyData.plans[planId]}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <ThemedSelect
+              value=""
+              onChange={(value) => value && toggleFilter('plan', value)}
+              options={[
+                { value: '', label: 'Select plan...' },
+                ...uniquePlans.map(planId => ({
+                  value: planId,
+                  label: companyData.plans[planId]
+                }))
+              ]}
+              placeholder="Select plan..."
+              label="Plan"
+            />
           )}
         </div>
 

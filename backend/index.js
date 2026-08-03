@@ -1,6 +1,6 @@
 const { app } = require('@azure/functions');
 const { getAllCompanyTasks } = require('./services/graphClient');
-const { validateUserToken, checkManagerAuthorization } = require('./utils/auth');
+const { validateUserToken, getManagerAccess, canAccessTask } = require('./utils/auth');
 const { Client } = require('@microsoft/microsoft-graph-client');
 const { ClientSecretCredential } = require('@azure/identity');
 const slackService = require('./services/slackService');
@@ -9,6 +9,7 @@ const slackCommands = require('./services/slackCommands');
 const taskPollingService = require('./services/taskPollingService');
 const morningDigestService = require('./services/morningDigestService');
 const { getTaskComments, addTaskComment } = require('./services/commentService');
+const { signState, verifyState } = require('./utils/oauthState');
 
 // CORS: echo the request's origin when it's in the ALLOWED_ORIGINS list.
 // A comma-separated list must never be sent as the header value directly -
@@ -92,10 +93,11 @@ app.http('GetCompanyTasks', {
         };
       }
 
-      // Check if user has manager permissions
+      // Determine manager access level (all-tasks group vs direct reports)
       context.log('Checking manager authorization...');
+      let access;
       try {
-        await checkManagerAuthorization(user, userToken);
+        access = await getManagerAccess(user);
       } catch (err) {
         context.error('Authorization check failed:', err.message);
         return {
@@ -112,7 +114,13 @@ app.http('GetCompanyTasks', {
       context.log('Fetching company-wide tasks...');
       const data = await getAllCompanyTasks();
 
-      context.log(`Successfully returned ${data.tasks.length} tasks`);
+      // Direct-report managers only see tasks assigned to their reports
+      // (or themselves); all-tasks group members see everything
+      if (access.level === 'reports') {
+        data.tasks = data.tasks.filter((t) => canAccessTask(access, t.assignments));
+      }
+
+      context.log(`Successfully returned ${data.tasks.length} tasks (access: ${access.level})`);
 
       return {
         status: 200,
@@ -214,8 +222,9 @@ app.http('CompleteTask', {
 
       // Check if user has manager permissions
       context.log('Checking manager authorization...');
+      let access;
       try {
-        await checkManagerAuthorization(user, userToken);
+        access = await getManagerAccess(user);
       } catch (err) {
         context.error('Authorization check failed:', err.message);
         return {
@@ -263,6 +272,18 @@ app.http('CompleteTask', {
       const task = await client
         .api(`/planner/tasks/${taskId}`)
         .get();
+
+      // Direct-report managers may only act on their reports' (or own) tasks
+      if (!canAccessTask(access, task.assignments)) {
+        return {
+          status: 403,
+          headers: corsHeaders,
+          jsonBody: {
+            error: 'Forbidden',
+            message: 'This task is not assigned to you or your direct reports'
+          }
+        };
+      }
 
       context.log(`Fetched task etag: ${task['@odata.etag']}`);
 
@@ -371,8 +392,9 @@ app.http('ReopenTask', {
 
       // Check if user has manager permissions
       context.log('Checking manager authorization...');
+      let access;
       try {
-        await checkManagerAuthorization(user, userToken);
+        access = await getManagerAccess(user);
       } catch (err) {
         context.error('Authorization check failed:', err.message);
         return {
@@ -421,6 +443,18 @@ app.http('ReopenTask', {
         .api(`/planner/tasks/${taskId}`)
         .get();
 
+      // Direct-report managers may only act on their reports' (or own) tasks
+      if (!canAccessTask(access, task.assignments)) {
+        return {
+          status: 403,
+          headers: corsHeaders,
+          jsonBody: {
+            error: 'Forbidden',
+            message: 'This task is not assigned to you or your direct reports'
+          }
+        };
+      }
+
       context.log(`Fetched task etag: ${task['@odata.etag']}`);
 
       // Update the task to reopen it (set to not started)
@@ -454,6 +488,99 @@ app.http('ReopenTask', {
           message: 'Failed to reopen task',
           details: process.env.NODE_ENV === 'development' ? error.message : undefined
         }
+      };
+    }
+  }
+});
+
+/**
+ * Azure Function: Slack OAuth Start
+ *
+ * Endpoint: GET /api/slack/oauth/start?returnOrigin=<origin>
+ * Auth: Requires valid user token
+ *
+ * Builds the Slack authorize URL with an HMAC-signed state. The user id in
+ * the state comes from the validated token (never from the client), and the
+ * return origin must be in the CORS allowlist.
+ */
+app.http('SlackOAuthStart', {
+  methods: ['GET', 'OPTIONS'],
+  route: 'slack/oauth/start',
+  authLevel: 'anonymous',
+  handler: async (request, context) => {
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': corsOrigin(request),
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true',
+      'Content-Type': 'application/json'
+    };
+
+    if (request.method === 'OPTIONS') {
+      return { status: 204, headers: corsHeaders };
+    }
+
+    try {
+      const authHeader = request.headers.get('authorization');
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return {
+          status: 401,
+          headers: corsHeaders,
+          jsonBody: { error: 'Unauthorized', message: 'Authorization header with Bearer token required' }
+        };
+      }
+
+      let user;
+      try {
+        user = await validateUserToken(authHeader.substring(7));
+      } catch (err) {
+        return {
+          status: 401,
+          headers: corsHeaders,
+          jsonBody: { error: 'Unauthorized', message: 'Invalid or expired token' }
+        };
+      }
+
+      // Only redirect back to origins we already trust for CORS
+      const requestedOrigin = request.query.get('returnOrigin');
+      const returnOrigin = ALLOWED_ORIGIN_LIST.includes(requestedOrigin)
+        ? requestedOrigin
+        : (process.env.FRONTEND_URL || 'http://localhost:5173');
+
+      // Callback URL on this same host (restore https behind the proxy)
+      let redirectUri = request.url.split('?')[0].replace(/\/start$/, '/callback');
+      const forwardedProto = request.headers.get('x-forwarded-proto');
+      if (forwardedProto === 'https' && redirectUri.startsWith('http://')) {
+        redirectUri = redirectUri.replace('http://', 'https://');
+      }
+
+      const state = signState({ userId: user.id, returnOrigin });
+
+      const scopes = [
+        'chat:write',
+        'commands',
+        'users:read',
+        'im:write',
+        'im:history',
+        'reactions:read',
+        'channels:history'
+      ].join(',');
+
+      const url =
+        'https://slack.com/oauth/v2/authorize' +
+        `?client_id=${encodeURIComponent(process.env.SLACK_CLIENT_ID)}` +
+        `&scope=${encodeURIComponent(scopes)}` +
+        `&user_scope=` +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&state=${encodeURIComponent(state)}`;
+
+      return { status: 200, headers: corsHeaders, jsonBody: { url } };
+    } catch (error) {
+      context.error('Error in SlackOAuthStart:', error);
+      return {
+        status: 500,
+        headers: corsHeaders,
+        jsonBody: { error: 'Internal Server Error' }
       };
     }
   }
@@ -500,13 +627,12 @@ app.http('SlackOAuthCallback', {
         };
       }
 
-      // Decode and parse state parameter
+      // Verify the HMAC-signed state issued by /api/slack/oauth/start
       let stateData;
       try {
-        stateData = JSON.parse(Buffer.from(state, 'base64').toString('utf-8'));
-        context.log(`State data: ${JSON.stringify(stateData)}`);
+        stateData = verifyState(state);
       } catch (err) {
-        context.error('Invalid state parameter:', err);
+        context.error('State verification failed:', err.message);
         return {
           status: 400,
           body: 'Invalid state parameter'
@@ -514,7 +640,7 @@ app.http('SlackOAuthCallback', {
       }
 
       const azureUserId = stateData.userId;
-      const returnUrl = stateData.returnUrl || 'http://localhost:5173/';
+      const returnOrigin = stateData.returnOrigin || process.env.FRONTEND_URL || 'http://localhost:5173';
 
       // Exchange authorization code for access token
       context.log('Exchanging OAuth code for access token...');
@@ -533,7 +659,6 @@ app.http('SlackOAuthCallback', {
       const oauthResult = await slackService.exchangeOAuthCode(code, redirectUri);
 
       context.log(`OAuth successful. Slack User ID: ${oauthResult.authedUser.id}`);
-      context.log('OAuth result structure:', JSON.stringify(oauthResult, null, 2));
 
       // Save Slack user mapping
       // Note: We use the bot token because we're only requesting bot scopes
@@ -558,25 +683,23 @@ app.http('SlackOAuthCallback', {
       context.log('Slack connection completed successfully');
 
       // Redirect back to Settings page with success
-      const successUrl = `${returnUrl}?view=settings&slack_connected=true`;
-
       return {
         status: 302,
         headers: {
-          'Location': successUrl
+          'Location': `${returnOrigin}/?view=settings&slack_connected=true`
         }
       };
 
     } catch (error) {
+      // Log details server-side but keep the redirect generic - error
+      // messages in URLs leak internals to browser history and logs
       context.error('Error in Slack OAuth callback:', error);
-      context.error('Error message:', error.message);
-      context.error('Error stack:', error.stack);
 
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
       return {
         status: 302,
         headers: {
-          'Location': `${frontendUrl}/?view=settings&slack_error=connection_failed&error_detail=${encodeURIComponent(error.message)}`
+          'Location': `${frontendUrl}/?view=settings&slack_error=connection_failed`
         }
       };
     }
@@ -1243,269 +1366,3 @@ app.timer('SendMorningDigest', {
   }
 });
 
-/**
- * Test Endpoint: Trigger Morning Digest Manually
- *
- * For testing purposes - sends morning digest to the authenticated user immediately
- * Remove or protect this before production deployment
- */
-app.http('TestMorningDigest', {
-  methods: ['POST'],
-  route: 'test/morning-digest',
-  authLevel: 'anonymous',
-  handler: async (request, context) => {
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-    };
-
-    if (request.method === 'OPTIONS') {
-      return { status: 200, headers: corsHeaders };
-    }
-
-    try {
-      // For testing, allow passing Azure user ID in request body
-      const requestBody = await request.json().catch(() => ({}));
-      let userId;
-
-      if (requestBody.azureUserId) {
-        // Test mode: Use Azure user ID directly from request body
-        userId = requestBody.azureUserId;
-        context.log(`Test mode: Using Azure user ID from request body: ${userId}`);
-      } else {
-        // Normal mode: Validate token
-        const authHeader = request.headers.get('authorization');
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-          return {
-            status: 401,
-            headers: corsHeaders,
-            jsonBody: { error: 'Unauthorized', hint: 'Pass azureUserId in request body for testing' }
-          };
-        }
-
-        const userToken = authHeader.substring(7);
-        const user = await validateUserToken(userToken);
-        userId = user.id;
-      }
-
-      // Send morning digest to this user
-      context.log(`Manually triggering morning digest for user ${userId}`);
-      const sent = await morningDigestService.sendUserMorningDigest(userId, true); // forceMode = true for manual testing
-
-      return {
-        status: 200,
-        headers: corsHeaders,
-        jsonBody: {
-          success: sent,
-          message: sent
-            ? 'Morning digest sent successfully! Check your Slack DMs.'
-            : 'Morning digest not sent. Check if you have Slack connected and morning digest enabled in settings.'
-        }
-      };
-
-    } catch (error) {
-      context.error('Error in TestMorningDigest:', error);
-      return {
-        status: 500,
-        headers: corsHeaders,
-        jsonBody: { error: 'Internal server error', details: error.message }
-      };
-    }
-  }
-});
-
-/**
- * Test Endpoint: Trigger Assignment Check Manually
- *
- * For testing purposes - checks for new task assignments immediately
- * Remove or protect this before production deployment
- */
-app.http('TestAssignmentCheck', {
-  methods: ['POST'],
-  route: 'test/assignment-check',
-  authLevel: 'anonymous',
-  handler: async (request, context) => {
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-    };
-
-    if (request.method === 'OPTIONS') {
-      return { status: 200, headers: corsHeaders };
-    }
-
-    try {
-      // For testing, allow passing Azure user ID in request body
-      const requestBody = await request.json().catch(() => ({}));
-      let userId;
-
-      if (requestBody.azureUserId) {
-        // Test mode: Use Azure user ID directly from request body
-        userId = requestBody.azureUserId;
-        context.log(`Test mode: Using Azure user ID from request body: ${userId}`);
-      } else {
-        // Normal mode: Validate token
-        const authHeader = request.headers.get('authorization');
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-          return {
-            status: 401,
-            headers: corsHeaders,
-            jsonBody: { error: 'Unauthorized', hint: 'Pass azureUserId in request body for testing' }
-          };
-        }
-
-        const userToken = authHeader.substring(7);
-        const user = await validateUserToken(userToken);
-        userId = user.id;
-      }
-
-      // Check assignments for this user
-      context.log(`Manually triggering assignment check for user ${userId}`);
-      const newAssignments = await taskPollingService.checkUserTaskAssignments(userId);
-
-      return {
-        status: 200,
-        headers: corsHeaders,
-        jsonBody: {
-          success: true,
-          newAssignments: newAssignments,
-          message: newAssignments > 0
-            ? `Found ${newAssignments} new assignment(s)! Check your Slack DMs.`
-            : 'No new assignments found. Check if you have Slack connected and assignment notifications enabled in settings.'
-        }
-      };
-
-    } catch (error) {
-      context.error('Error in TestAssignmentCheck:', error);
-      return {
-        status: 500,
-        headers: corsHeaders,
-        jsonBody: { error: 'Internal server error', details: error.message }
-      };
-    }
-  }
-});
-
-/**
- * Test Endpoint: Create a Test Task
- *
- * Creates a test task assigned to the authenticated user
- * For testing assignment notifications
- */
-app.http('CreateTestTask', {
-  methods: ['POST'],
-  route: 'test/create-task',
-  authLevel: 'anonymous',
-  handler: async (request, context) => {
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-    };
-
-    if (request.method === 'OPTIONS') {
-      return { status: 200, headers: corsHeaders };
-    }
-
-    try {
-      // For testing, allow passing Azure user ID in request body
-      const requestBody = await request.json().catch(() => ({}));
-      let userId;
-
-      if (requestBody.azureUserId) {
-        // Test mode: Use Azure user ID directly from request body
-        userId = requestBody.azureUserId;
-        context.log(`Test mode: Using Azure user ID from request body: ${userId}`);
-      } else {
-        // Normal mode: Validate token
-        const authHeader = request.headers.get('authorization');
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-          return {
-            status: 401,
-            headers: corsHeaders,
-            jsonBody: { error: 'Unauthorized', hint: 'Pass azureUserId in request body for testing' }
-          };
-        }
-
-        const userToken = authHeader.substring(7);
-        const user = await validateUserToken(userToken);
-        userId = user.id;
-      }
-
-      // Get user's preferences to find default plan
-      const preferences = await storage.getNotificationPreferences(userId);
-
-      if (!preferences?.defaultPlanId || !preferences?.defaultBucketId) {
-        return {
-          status: 400,
-          headers: corsHeaders,
-          jsonBody: {
-            error: 'No default plan set',
-            message: 'Please set a default plan in Settings first'
-          }
-        };
-      }
-
-      // Create Graph client with user's token
-      const credential = new ClientSecretCredential(
-        process.env.AZURE_TENANT_ID,
-        process.env.AZURE_CLIENT_ID,
-        process.env.AZURE_CLIENT_SECRET
-      );
-
-      const graphClient = Client.initWithMiddleware({
-        authProvider: {
-          getAccessToken: async () => {
-            const token = await credential.getToken('https://graph.microsoft.com/.default');
-            return token.token;
-          }
-        }
-      });
-
-      // Create task
-      const now = new Date();
-      const taskTitle = `Test Notification - ${now.toLocaleTimeString()}`;
-
-      const newTask = {
-        planId: preferences.defaultPlanId,
-        bucketId: preferences.defaultBucketId,
-        title: taskTitle,
-        assignments: {
-          [userId]: {
-            '@odata.type': '#microsoft.graph.plannerAssignment',
-            orderHint: ' !'
-          }
-        },
-        dueDateTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // Due tomorrow
-      };
-
-      context.log(`Creating test task for user ${userId}: ${taskTitle}`);
-      const createdTask = await graphClient.api('/planner/tasks').post(newTask);
-
-      return {
-        status: 200,
-        headers: corsHeaders,
-        jsonBody: {
-          success: true,
-          task: {
-            id: createdTask.id,
-            title: createdTask.title,
-            planId: createdTask.planId,
-            bucketId: createdTask.bucketId
-          },
-          message: `Created task "${taskTitle}". Now run the assignment check test to see the notification!`
-        }
-      };
-
-    } catch (error) {
-      context.error('Error in CreateTestTask:', error);
-      return {
-        status: 500,
-        headers: corsHeaders,
-        jsonBody: { error: 'Internal server error', details: error.message, stack: error.stack }
-      };
-    }
-  }
-});

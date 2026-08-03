@@ -1,4 +1,3 @@
-import React from 'react';
 import { Filter, SortAsc } from '../ui/icons';
 
 export default function FilterBar({

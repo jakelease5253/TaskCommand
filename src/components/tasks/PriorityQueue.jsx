@@ -1,5 +1,4 @@
-import React from 'react';
-import { Target, X, Calendar, Folder, AlertCircle, Edit, Check, Users } from '../ui/icons';
+import { Target, X, Calendar, Folder, Edit, Check, Users } from '../ui/icons';
 
 export default function PriorityQueue({
   priorityTasks,
@@ -8,7 +7,6 @@ export default function PriorityQueue({
   userProfiles,
   focusTask,
   onRemoveFromPriority,
-  onReorder,
   onSetFocus,
   onEdit,
   onComplete,
@@ -35,15 +33,6 @@ export default function PriorityQueue({
       9: 'bg-slate-100 text-slate-700'
     };
     return colors[priority] || 'bg-blue-100 text-blue-700';
-  };
-
-  const isOverdue = (task) => {
-    if (!task.dueDateTime) return false;
-    const dueDateStr = task.dueDateTime.split('T')[0];
-    const dueDate = new Date(dueDateStr + 'T00:00:00');
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return dueDate < today && task.percentComplete < 100;
   };
 
   return (

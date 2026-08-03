@@ -1,4 +1,3 @@
-import React from 'react';
 import { Edit, Check, Calendar, Folder, Users, AlertCircle, Target, ChevronDown, ChevronUp } from '../ui/icons';
 
 export default function AllTasksList({
@@ -15,7 +14,6 @@ export default function AllTasksList({
   loading,
   isCollapsed = false,
   onToggleCollapse,
-  onNewTask,
   onSetFocus,
   onEdit,
   onComplete,

@@ -70,8 +70,7 @@ export default function DateRangeMultiSelect({
   };
 
   const getButtonLabel = () => {
-    const isCustomEnabled = customStartDate || customEndDate;
-    const filterCount = selectedRanges.length + (isCustomEnabled ? 1 : 0);
+      const filterCount = selectedRanges.length + (isCustomEnabled ? 1 : 0);
 
     if (filterCount === 0) {
       return 'Date: All';
@@ -96,6 +95,8 @@ export default function DateRangeMultiSelect({
     if ((customStartDate || customEndDate) && !showCustomRange) {
       setShowCustomRange(true);
     }
+    // Only auto-open when dates arrive; including showCustomRange would reopen it after a manual close
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customStartDate, customEndDate]);
 
   return (

@@ -1,9 +1,6 @@
-import React from "react";
 import { BarChart, TrendingUp, Award, Zap, ChevronUp } from "../../../components/ui/icons";
 
 export default function Dashboard({
-  dateRange,
-  setDateRange,
   metrics,
   onToggleCollapse,
 }) {

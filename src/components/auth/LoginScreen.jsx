@@ -1,4 +1,3 @@
-import React from 'react';
 import Logo from '../brand/Logo';
 import TerminalIcon from '../brand/TerminalIcon';
 import BrandButton from '../brand/BrandButton';

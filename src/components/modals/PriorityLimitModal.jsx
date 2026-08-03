@@ -1,4 +1,3 @@
-import React from 'react';
 import { AlertCircle, X } from '../ui/icons';
 
 export default function PriorityLimitModal({ isOpen, onClose }) {
@@ -45,7 +44,7 @@ export default function PriorityLimitModal({ isOpen, onClose }) {
             onClick={onClose}
             className="w-full px-6 py-3 gradient-primary text-white rounded-xl font-medium shadow-md hover:shadow-lg transition-all"
           >
-            Got it, I'll focus!
+            Got it, I&apos;ll focus!
           </button>
         </div>
       </div>

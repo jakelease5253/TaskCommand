@@ -1,4 +1,3 @@
-import React from 'react';
 import TerminalIcon from '../brand/TerminalIcon';
 import Logo from '../brand/Logo';
 import { useTheme } from '../../contexts/ThemeContext';

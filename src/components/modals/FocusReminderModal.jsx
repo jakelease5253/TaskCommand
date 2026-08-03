@@ -1,5 +1,4 @@
-import React from 'react';
-import { Clock, CheckSquare, AlertCircle } from '../ui/icons';
+import { Clock, CheckSquare } from '../ui/icons';
 import { useTheme } from '../../contexts/ThemeContext';
 
 /**

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Slack, Link, Unlink, Bell, AlertCircle, Check, ChevronDown } from "../../components/ui/icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { themes } from "../../constants/themes";
@@ -22,8 +22,6 @@ export default function Settings({ accessToken, user, focusReminderInterval, set
   const [kudosTimeDropdownOpen, setKudosTimeDropdownOpen] = useState(false);
   const [weeklyDayDropdownOpen, setWeeklyDayDropdownOpen] = useState(false);
   const [weeklyTimeDropdownOpen, setWeeklyTimeDropdownOpen] = useState(false);
-  const [digestGroupingDropdownOpen, setDigestGroupingDropdownOpen] = useState(false);
-  const [channelTypeDropdownOpen, setChannelTypeDropdownOpen] = useState(false);
   const [planDropdownOpen, setPlanDropdownOpen] = useState(false);
   const [bucketDropdownOpen, setBucketDropdownOpen] = useState(false);
   const [focusReminderDropdownOpen, setFocusReminderDropdownOpen] = useState(false);
@@ -33,8 +31,6 @@ export default function Settings({ accessToken, user, focusReminderInterval, set
   const kudosTimeDropdownRef = useRef(null);
   const weeklyDayDropdownRef = useRef(null);
   const weeklyTimeDropdownRef = useRef(null);
-  const digestGroupingDropdownRef = useRef(null);
-  const channelTypeDropdownRef = useRef(null);
   const planDropdownRef = useRef(null);
   const bucketDropdownRef = useRef(null);
   const focusReminderDropdownRef = useRef(null);
@@ -67,12 +63,6 @@ export default function Settings({ accessToken, user, focusReminderInterval, set
       }
       if (weeklyTimeDropdownRef.current && !weeklyTimeDropdownRef.current.contains(event.target)) {
         setWeeklyTimeDropdownOpen(false);
-      }
-      if (digestGroupingDropdownRef.current && !digestGroupingDropdownRef.current.contains(event.target)) {
-        setDigestGroupingDropdownOpen(false);
-      }
-      if (channelTypeDropdownRef.current && !channelTypeDropdownRef.current.contains(event.target)) {
-        setChannelTypeDropdownOpen(false);
       }
       if (planDropdownRef.current && !planDropdownRef.current.contains(event.target)) {
         setPlanDropdownOpen(false);
@@ -113,6 +103,7 @@ export default function Settings({ accessToken, user, focusReminderInterval, set
       // Clean up URL
       window.history.replaceState({}, '', window.location.pathname + '?view=settings');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
   const checkSlackConnection = async () => {
@@ -156,42 +147,27 @@ export default function Settings({ accessToken, user, focusReminderInterval, set
     }
   };
 
-  const handleConnectSlack = () => {
+  const handleConnectSlack = async () => {
     // Clear any previous messages
     setError(null);
     setSuccess(null);
 
-    // Build OAuth URL
-    const clientId = '20478714756.9785587179955';
-    const redirectUri = `${backendUrl}/api/slack/oauth/callback`;
-    const scopes = [
-      'chat:write',
-      'commands',
-      'users:read',
-      'im:write',
-      'im:history',
-      'reactions:read',
-      'channels:history'
-    ].join(',');
-
-    // Generate state for CSRF protection
-    const state = btoa(JSON.stringify({
-      userId: user?.id || user?.mail || 'unknown',
-      timestamp: Date.now(),
-      returnUrl: window.location.href
-    }));
-
-    const oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${clientId}&scope=${scopes}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}`;
-
-    console.log('=== Slack OAuth Debug ===');
-    console.log('Backend URL:', backendUrl);
-    console.log('Redirect URI:', redirectUri);
-    console.log('Client ID:', clientId);
-    console.log('Full OAuth URL:', oauthUrl);
-    console.log('========================');
-
-    // Redirect to Slack OAuth
-    window.location.href = oauthUrl;
+    // The backend builds the authorize URL with an HMAC-signed state tied
+    // to the authenticated user, so nothing here can be forged or tampered
+    try {
+      const response = await fetch(
+        `${backendUrl}/api/slack/oauth/start?returnOrigin=${encodeURIComponent(window.location.origin)}`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+      if (!response.ok) {
+        throw new Error('Failed to start Slack authorization');
+      }
+      const { url } = await response.json();
+      window.location.href = url;
+    } catch (err) {
+      console.error('Error starting Slack OAuth:', err);
+      setError('Unable to start Slack authorization. Please try again.');
+    }
   };
 
   const handleDisconnectSlack = async () => {
@@ -467,6 +443,7 @@ export default function Settings({ accessToken, user, focusReminderInterval, set
     if (slackConnection?.connected && preferences) {
       fetchAvailablePlans();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slackConnection?.connected, preferences?.defaultPlanId]);
 
   return (
@@ -1042,7 +1019,7 @@ export default function Settings({ accessToken, user, focusReminderInterval, set
             fontFamily: 'Poppins',
             color: '#64748b',
             marginTop: '8px'
-          }}>How often to check if you're still working on your focus task</p>
+          }}>How often to check if you&apos;re still working on your focus task</p>
         </div>
       </div>
 

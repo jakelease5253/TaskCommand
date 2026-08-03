@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { GripVertical, Target, X, Search, Filter as FilterIcon, Users, Calendar, CheckSquare } from '../../components/ui/icons';
 import BulkActionsBar from '../../components/tasks/BulkActionsBar';
 import BulkAssigneeModal from '../../components/modals/BulkAssigneeModal';
@@ -118,10 +118,11 @@ export default function PlanningView({
         return new Date(a.dueDateTime) - new Date(b.dueDateTime);
       case 'priority':
         return (a.priority || 5) - (b.priority || 5);
-      case 'plan':
+      case 'plan': {
         const planA = plans[a.planId] || '';
         const planB = plans[b.planId] || '';
         return planA.localeCompare(planB);
+      }
       case 'title':
         return a.title.localeCompare(b.title);
       default:
@@ -624,8 +625,6 @@ export default function PlanningView({
                 <div className="divide-y divide-slate-100">
                   {sortedTasks.map(task => {
                     const inQueue = priorityTaskIds.includes(task.id);
-                    const details = taskDetails[task.id];
-                    const isHovered = hoveredTask?.id === task.id;
 
                     return (
                       <div

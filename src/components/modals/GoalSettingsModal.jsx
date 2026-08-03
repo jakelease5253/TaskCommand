@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Target, X, Clock, Calendar } from '../ui/icons';
 import { useTheme } from '../../contexts/ThemeContext';
 

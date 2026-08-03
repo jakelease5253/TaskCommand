@@ -1,4 +1,3 @@
-import React from 'react';
 
 // Icon components from Uizard exports
 const HomeIcon = ({ color = 'var(--theme-primary)' }) => (

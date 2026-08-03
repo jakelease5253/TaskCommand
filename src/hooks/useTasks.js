@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { graphRequest, patchPlannerTask, GraphApiError } from '../services/plannerApi';
 
 export function useTasks(accessToken) {
   const [tasks, setTasks] = useState([]);
@@ -15,19 +16,7 @@ export function useTasks(accessToken) {
     setError(null);
     try {
       // Fetch plans
-      const groupsResponse = await fetch('https://graph.microsoft.com/v1.0/me/planner/plans', {
-        headers: {'Authorization': `Bearer ${accessToken}`}
-      });
-
-      // Check for unauthorized (expired token)
-      if (groupsResponse.status === 401) {
-        console.log('Token expired, clearing authentication...');
-        localStorage.removeItem('taskcommand_access_token');
-        window.location.reload();
-        return;
-      }
-
-      const groupsData = await groupsResponse.json();
+      const groupsData = await graphRequest(accessToken, '/me/planner/plans');
       const plansMap = {};
       groupsData.value.forEach(plan => {
         plansMap[plan.id] = plan.title;
@@ -37,19 +26,13 @@ export function useTasks(accessToken) {
       // Fetch buckets for each plan
       const bucketsMap = {};
       for (const planId of Object.keys(plansMap)) {
-        const bucketsResponse = await fetch(`https://graph.microsoft.com/v1.0/planner/plans/${planId}/buckets`, {
-          headers: {'Authorization': `Bearer ${accessToken}`}
-        });
-        const bucketsData = await bucketsResponse.json();
+        const bucketsData = await graphRequest(accessToken, `/planner/plans/${planId}/buckets`);
         bucketsMap[planId] = bucketsData.value;
       }
       setBuckets(bucketsMap);
 
       // Fetch tasks
-      const tasksResponse = await fetch('https://graph.microsoft.com/v1.0/me/planner/tasks', {
-        headers: {'Authorization': `Bearer ${accessToken}`}
-      });
-      const tasksData = await tasksResponse.json();
+      const tasksData = await graphRequest(accessToken, '/me/planner/tasks');
       setTasks(tasksData.value || []);
 
       // Fetch user profiles for assigned users
@@ -63,24 +46,22 @@ export function useTasks(accessToken) {
       const profiles = {};
       for (const userId of userIds) {
         try {
-          const userResponse = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}`, {
-            headers: {'Authorization': `Bearer ${accessToken}`}
-          });
-          
-          // Check if we got a valid response
-          if (userResponse.ok) {
-            const userData = await userResponse.json();
-            profiles[userId] = userData.displayName || userData.userPrincipalName || 'Unknown';
-          } else {
-            // Don't log 403 errors - just mark as Unknown
-            profiles[userId] = 'User';
-          }
+          const userData = await graphRequest(accessToken, `/users/${userId}`);
+          profiles[userId] = userData.displayName || userData.userPrincipalName || 'Unknown';
         } catch (err) {
+          // Don't log 403 errors - just mark as Unknown
           profiles[userId] = 'User';
         }
       }
       setUserProfiles(profiles);
     } catch (err) {
+      // Expired token: clear auth and start over
+      if (err instanceof GraphApiError && err.status === 401) {
+        console.log('Token expired, clearing authentication...');
+        localStorage.removeItem('taskcommand_access_token');
+        window.location.reload();
+        return;
+      }
       setError(err.message);
       console.error('Error fetching tasks:', err);
     } finally {
@@ -98,34 +79,7 @@ export function useTasks(accessToken) {
     setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
 
     try {
-      // Fetch fresh task to get current etag
-      const taskResponse = await fetch(
-        `https://graph.microsoft.com/v1.0/planner/tasks/${taskId}`,
-        {
-          headers: { 'Authorization': `Bearer ${accessToken}` }
-        }
-      );
-      const freshTask = await taskResponse.json();
-
-      // Mark as complete using fresh etag
-      const updateResponse = await fetch(
-        `https://graph.microsoft.com/v1.0/planner/tasks/${taskId}`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-            'If-Match': freshTask['@odata.etag']
-          },
-          body: JSON.stringify({ percentComplete: 100 })
-        }
-      );
-
-      if (!updateResponse.ok) {
-        const errorData = await updateResponse.json();
-        throw new Error(errorData.error?.message || 'Failed to complete task');
-      }
-
+      await patchPlannerTask(accessToken, taskId, { percentComplete: 100 });
       return task;
     } catch (err) {
       // On error, restore the task to the list
@@ -145,16 +99,10 @@ export function useTasks(accessToken) {
     if (!accessToken) return;
     
     try {
-      const response = await fetch('https://graph.microsoft.com/v1.0/planner/tasks', {
+      return await graphRequest(accessToken, '/planner/tasks', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify(taskData)
       });
-
-      return await response.json();
     } catch (err) {
       setError(err.message);
       throw err;
@@ -163,24 +111,9 @@ export function useTasks(accessToken) {
 
   const updateTask = async (taskId, taskData) => {
     if (!accessToken) return;
-    
+
     try {
-      const detailsResponse = await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${taskId}/details`, {
-        headers: {'Authorization': `Bearer ${accessToken}`}
-      });
-      const details = await detailsResponse.json();
-
-      await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${taskId}`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-          'If-Match': details['@odata.etag']
-        },
-        body: JSON.stringify(taskData)
-      });
-
-      return details;
+      return await patchPlannerTask(accessToken, taskId, taskData);
     } catch (err) {
       setError(err.message);
       throw err;
@@ -189,15 +122,11 @@ export function useTasks(accessToken) {
 
   const updateTaskDetails = async (taskId, description, etag) => {
     if (!accessToken) return;
-    
+
     try {
-      await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${taskId}/details`, {
+      await graphRequest(accessToken, `/planner/tasks/${taskId}/details`, {
         method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-          'If-Match': etag
-        },
+        headers: { 'If-Match': etag },
         body: JSON.stringify({description})
       });
     } catch (err) {
@@ -208,13 +137,9 @@ export function useTasks(accessToken) {
 
   const fetchTaskDetails = async (taskId) => {
     if (!accessToken) return null;
-    
+
     try {
-      const detailsResponse = await fetch(`https://graph.microsoft.com/v1.0/planner/tasks/${taskId}/details`, {
-        headers: {'Authorization': `Bearer ${accessToken}`}
-      });
-      const details = await detailsResponse.json();
-      return details;
+      return await graphRequest(accessToken, `/planner/tasks/${taskId}/details`);
     } catch (err) {
       console.error('Error fetching task details:', err);
       return null;

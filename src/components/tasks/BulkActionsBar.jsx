@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Check, X, Calendar, Users, AlertCircle, Folder } from '../ui/icons';
 
 export default function BulkActionsBar({

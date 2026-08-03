@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
-import { AlertCircle, Users, Calendar, Target, TrendingUp, Archive, Search, X, ChevronUp, ChevronDown, RefreshCw, Plus } from "../../../components/ui/icons";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { AlertCircle, Calendar, Target, TrendingUp, Archive, Search, X, ChevronUp, ChevronDown, RefreshCw, Plus } from "../../../components/ui/icons";
 import NewTaskModal from "../../../components/tasks/NewTaskModal";
 import DateRangeMultiSelect from "../../../components/tasks/DateRangeMultiSelect";
 import ThemedSelect from "../../../components/tasks/ThemedSelect";
@@ -94,6 +94,7 @@ export default function ManagerDashboard({
 
   useEffect(() => {
     fetchCompanyTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
   // Manual refresh without full loading state
@@ -959,7 +960,7 @@ export default function ManagerDashboard({
                 </tr>
               )}
 
-              {visibleTasks.map(({ task, index }) => (
+              {visibleTasks.map(({ task }) => (
                 <tr
                   key={task.id}
                   onClick={() => onEditTask && onEditTask(task)}

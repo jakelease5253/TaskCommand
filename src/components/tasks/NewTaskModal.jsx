@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, AlertCircle } from "../ui/icons";
 import ChecklistEditor from "./ChecklistEditor";
 import CustomDropdown from "../ui/CustomDropdown";
@@ -56,6 +56,7 @@ export default function NewTaskModal({
     } else {
       setPlanMembers([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlanId, accessToken]);
 
   const fetchPlanMembers = async (planId) => {

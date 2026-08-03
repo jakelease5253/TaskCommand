@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Folder } from '../ui/icons';
 import CustomDropdown from '../ui/CustomDropdown';
 import { useTheme } from '../../contexts/ThemeContext';

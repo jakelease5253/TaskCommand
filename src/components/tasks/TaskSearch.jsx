@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Search, Calendar, Folder } from '../ui/icons';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -202,7 +202,7 @@ export default function TaskSearch({ tasks, plans, buckets, onTaskSelect }) {
               fontFamily: 'Poppins',
               color: colors.textSecondary
             }}>
-              No tasks found matching "{searchQuery}"
+              No tasks found matching &quot;{searchQuery}&quot;
             </div>
           )}
         </div>

@@ -3,6 +3,8 @@
  * Formats task data into Slack Block Kit format for rich, interactive messages
  */
 
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+
 const formatPriorityBadge = (priority) => {
   const badges = {
     1: '🔴 High',
@@ -61,7 +63,7 @@ function formatTaskBlock(task, plan, bucket) {
         type: 'plain_text',
         text: '👁️ View'
       },
-      url: `http://localhost:5173/?task=${task.id}`,
+      url: `${FRONTEND_URL}/?task=${task.id}`,
       action_id: 'view_task'
     }
   });
@@ -296,7 +298,7 @@ function formatAssignmentNotification(task, plan, bucket) {
             text: '👁️ View Task',
             emoji: true
           },
-          url: `http://localhost:5173/?task=${task.id}`,
+          url: `${FRONTEND_URL}/?task=${task.id}`,
           action_id: 'view_task'
         }
       ]

@@ -1,5 +1,10 @@
 const { Client } = require('@microsoft/microsoft-graph-client');
+const { getGraphClient } = require('../services/graphClient');
 require('isomorphic-fetch');
+
+// Security group whose members can see/manage ALL tasks regardless of
+// assignment ("TaskCommand All Tasks" in Entra).
+const ALL_TASKS_GROUP_ID = process.env.ALL_TASKS_GROUP_ID;
 
 /**
  * Validate user's access token by calling Microsoft Graph /me endpoint
@@ -32,47 +37,71 @@ async function validateUserToken(token) {
 }
 
 /**
- * Check if user is authorized to access manager dashboard
- * Currently checks if user is in "Managers" group or has specific role
+ * Determine the user's manager-dashboard access level.
  *
- * TODO: Customize this based on your organization's requirements
- * Options:
- * - Check group membership (recommended)
- * - Check Azure AD role
- * - Check specific user IDs
- * - Custom logic
+ * Two tiers:
+ * - 'all': member of the ALL_TASKS_GROUP_ID security group (transitive) -
+ *   sees and manages every task in the organization.
+ * - 'reports': has direct reports per the Entra manager field - sees and
+ *   manages tasks assigned to their reports (and themselves).
+ *
+ * Throws if the user qualifies for neither.
+ *
+ * Returns { level: 'all' } or { level: 'reports', allowedUserIds: Set }
  */
-async function checkManagerAuthorization(user, userToken) {
-  // For now, allow all authenticated users
-  // TODO: Implement actual role check
+async function getManagerAccess(user) {
+  const client = getGraphClient();
 
-  // Example: Check if user is in "Managers" security group
-  // Uncomment and modify when you're ready to add restrictions
+  // Tier 1: all-tasks security group (transitive membership)
+  if (ALL_TASKS_GROUP_ID) {
+    try {
+      const result = await client
+        .api(`/users/${user.id}/checkMemberGroups`)
+        .post({ groupIds: [ALL_TASKS_GROUP_ID] });
 
-  /*
-  const client = Client.init({
-    authProvider: (done) => done(null, userToken)
-  });
-
-  const memberOf = await client
-    .api(`/me/memberOf`)
-    .get();
-
-  const isManager = memberOf.value.some(
-    group => group.displayName === 'Managers' ||
-             group.id === 'YOUR_MANAGERS_GROUP_ID'
-  );
-
-  if (!isManager) {
-    throw new Error('User does not have manager permissions');
+      if (result.value && result.value.includes(ALL_TASKS_GROUP_ID)) {
+        console.log(`User ${user.displayName} has all-tasks access (group member)`);
+        return { level: 'all' };
+      }
+    } catch (err) {
+      // Fall through to the direct-reports tier rather than failing open
+      console.error('checkMemberGroups failed:', err.message);
+    }
+  } else {
+    console.warn('ALL_TASKS_GROUP_ID is not set; only the direct-reports tier is active');
   }
-  */
 
-  console.log(`User ${user.displayName} authorized for manager dashboard`);
-  return true;
+  // Tier 2: Entra manager relationship - direct reports
+  try {
+    const reports = await client
+      .api(`/users/${user.id}/directReports`)
+      .select('id')
+      .get();
+
+    const reportIds = (reports.value || []).map((r) => r.id);
+    if (reportIds.length > 0) {
+      console.log(`User ${user.displayName} has manager access to ${reportIds.length} direct report(s)`);
+      return { level: 'reports', allowedUserIds: new Set([user.id, ...reportIds]) };
+    }
+  } catch (err) {
+    console.error('directReports lookup failed:', err.message);
+  }
+
+  throw new Error('User does not have manager permissions');
+}
+
+/**
+ * True if the given access level permits acting on a task with the given
+ * assignments object (Planner task.assignments, keyed by user id).
+ */
+function canAccessTask(access, assignments) {
+  if (access.level === 'all') return true;
+  const assignedIds = Object.keys(assignments || {});
+  return assignedIds.some((id) => access.allowedUserIds.has(id));
 }
 
 module.exports = {
   validateUserToken,
-  checkManagerAuthorization
+  getManagerAccess,
+  canAccessTask
 };

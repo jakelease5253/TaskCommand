@@ -1,6 +1,6 @@
 const { app } = require('@azure/functions');
 const { getAllCompanyTasks } = require('./services/graphClient');
-const { validateUserToken, checkManagerAuthorization } = require('./utils/auth');
+const { validateUserToken, getManagerAccess, canAccessTask } = require('./utils/auth');
 const { Client } = require('@microsoft/microsoft-graph-client');
 const { ClientSecretCredential } = require('@azure/identity');
 const slackService = require('./services/slackService');
@@ -92,10 +92,11 @@ app.http('GetCompanyTasks', {
         };
       }
 
-      // Check if user has manager permissions
+      // Determine manager access level (all-tasks group vs direct reports)
       context.log('Checking manager authorization...');
+      let access;
       try {
-        await checkManagerAuthorization(user, userToken);
+        access = await getManagerAccess(user);
       } catch (err) {
         context.error('Authorization check failed:', err.message);
         return {
@@ -112,7 +113,13 @@ app.http('GetCompanyTasks', {
       context.log('Fetching company-wide tasks...');
       const data = await getAllCompanyTasks();
 
-      context.log(`Successfully returned ${data.tasks.length} tasks`);
+      // Direct-report managers only see tasks assigned to their reports
+      // (or themselves); all-tasks group members see everything
+      if (access.level === 'reports') {
+        data.tasks = data.tasks.filter((t) => canAccessTask(access, t.assignments));
+      }
+
+      context.log(`Successfully returned ${data.tasks.length} tasks (access: ${access.level})`);
 
       return {
         status: 200,
@@ -214,8 +221,9 @@ app.http('CompleteTask', {
 
       // Check if user has manager permissions
       context.log('Checking manager authorization...');
+      let access;
       try {
-        await checkManagerAuthorization(user, userToken);
+        access = await getManagerAccess(user);
       } catch (err) {
         context.error('Authorization check failed:', err.message);
         return {
@@ -263,6 +271,18 @@ app.http('CompleteTask', {
       const task = await client
         .api(`/planner/tasks/${taskId}`)
         .get();
+
+      // Direct-report managers may only act on their reports' (or own) tasks
+      if (!canAccessTask(access, task.assignments)) {
+        return {
+          status: 403,
+          headers: corsHeaders,
+          jsonBody: {
+            error: 'Forbidden',
+            message: 'This task is not assigned to you or your direct reports'
+          }
+        };
+      }
 
       context.log(`Fetched task etag: ${task['@odata.etag']}`);
 
@@ -371,8 +391,9 @@ app.http('ReopenTask', {
 
       // Check if user has manager permissions
       context.log('Checking manager authorization...');
+      let access;
       try {
-        await checkManagerAuthorization(user, userToken);
+        access = await getManagerAccess(user);
       } catch (err) {
         context.error('Authorization check failed:', err.message);
         return {
@@ -420,6 +441,18 @@ app.http('ReopenTask', {
       const task = await client
         .api(`/planner/tasks/${taskId}`)
         .get();
+
+      // Direct-report managers may only act on their reports' (or own) tasks
+      if (!canAccessTask(access, task.assignments)) {
+        return {
+          status: 403,
+          headers: corsHeaders,
+          jsonBody: {
+            error: 'Forbidden',
+            message: 'This task is not assigned to you or your direct reports'
+          }
+        };
+      }
 
       context.log(`Fetched task etag: ${task['@odata.etag']}`);
 

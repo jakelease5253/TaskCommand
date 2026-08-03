@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
-import { BarChart, RefreshCw, LogOut, Users, ChevronDown, Target } from "../ui/icons";
+import { BarChart, RefreshCw, LogOut, Users, ChevronDown, Target, Calendar } from "../ui/icons";
 import TaskCommandLogo from "../ui/TaskCommandLogo";
+import { useTheme } from "../../contexts/ThemeContext";
 
 export default function Header({
   user,
@@ -10,6 +11,8 @@ export default function Header({
   onLogout,
   loading = false,
 }) {
+  const { theme } = useTheme();
+  console.log('Header rendering with theme:', theme.id, 'primaryDark:', theme.colors.primaryDark);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -39,10 +42,14 @@ export default function Header({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => onNavigate('personal')}
+              className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
+            >
               <TaskCommandLogo size="sm" />
-              <h1 className="text-2xl font-bold text-slate-800">TaskCommand</h1>
-            </div>
+              <h1 className="text-2xl font-bold" style={{ color: theme.colors.primaryDark }}>TaskCommand</h1>
+            </button>
             {user && (
               <span className="text-sm text-slate-600 hidden sm:inline">
                 Welcome, {user.displayName}
@@ -51,14 +58,17 @@ export default function Header({
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onRefresh}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-colors text-sm font-medium text-slate-700"
-            >
-              <RefreshCw className={loading ? "animate-spin" : ""} />
-              Refresh
-            </button>
+            {/* Only show refresh button on personal view (manager dashboard has its own refresh) */}
+            {currentView === 'personal' && (
+              <button
+                type="button"
+                onClick={onRefresh}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-colors text-sm font-medium text-slate-700"
+              >
+                <RefreshCw className={loading ? "animate-spin" : ""} />
+                Refresh
+              </button>
+            )}
 
             {/* Menu Dropdown */}
             <div className="relative" ref={dropdownRef}>
@@ -86,6 +96,22 @@ export default function Header({
                     <Target />
                     Personal Tasks
                     {currentView === 'personal' && (
+                      <span className="ml-auto text-indigo-600">✓</span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleMenuSelect('planning')}
+                    className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors border-t border-slate-100 ${
+                      currentView === 'planning'
+                        ? 'bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-700'
+                        : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Calendar />
+                    Planning
+                    {currentView === 'planning' && (
                       <span className="ml-auto text-indigo-600">✓</span>
                     )}
                   </button>

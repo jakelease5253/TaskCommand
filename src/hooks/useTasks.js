@@ -90,15 +90,18 @@ export function useTasks(accessToken) {
 
   const completeTask = async (taskId) => {
     if (!accessToken) return;
-    
-    try {
-      const task = tasks.find(t => t.id === taskId);
-      if (!task) return;
 
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    // Optimistic update: remove task from list immediately for instant feedback
+    setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
+
+    try {
       // Fetch fresh task to get current etag
       const taskResponse = await fetch(
         `https://graph.microsoft.com/v1.0/planner/tasks/${taskId}`,
-        { 
+        {
           headers: { 'Authorization': `Bearer ${accessToken}` }
         }
       );
@@ -125,6 +128,14 @@ export function useTasks(accessToken) {
 
       return task;
     } catch (err) {
+      // On error, restore the task to the list
+      setTasks(prevTasks => [...prevTasks, task].sort((a, b) => {
+        // Sort by due date (tasks without due dates go to end)
+        if (!a.dueDateTime && !b.dueDateTime) return 0;
+        if (!a.dueDateTime) return 1;
+        if (!b.dueDateTime) return -1;
+        return new Date(a.dueDateTime) - new Date(b.dueDateTime);
+      }));
       setError(err.message);
       throw err;
     }
@@ -212,6 +223,7 @@ export function useTasks(accessToken) {
 
   return {
     tasks,
+    setTasks,
     plans,
     buckets,
     userProfiles,

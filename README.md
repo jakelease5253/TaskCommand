@@ -12,6 +12,8 @@ A modern task management application built with React and Microsoft Graph API, f
 - 🎯 **Priority Queue** - Manage up to 7 high-priority tasks with drag & drop
 - 📱 **Responsive Design** - Beautiful UI that works on all devices
 - 🔄 **Real-time Sync** - Direct integration with Microsoft Planner
+- 💬 **Slack Integration** - Task notifications and slash commands
+- 🔔 **Task Polling** - Automatic notifications for task changes
 
 ### Manager Dashboard
 - 👥 **Company-Wide View** - See all tasks across all teams
@@ -28,22 +30,30 @@ TaskCommand/
 │   ├── components/              # Reusable UI components
 │   ├── features/                # Feature-specific components
 │   │   ├── dashboards/         # Personal & Manager dashboards
+│   │   ├── insights/           # Analytics and metrics
 │   │   └── settings/           # Settings page
 │   ├── hooks/                  # Custom React hooks
 │   └── App.jsx                 # Main application
 │
-└── backend/                     # Azure Functions (Node.js)
-    ├── GetCompanyTasks/        # Company-wide tasks endpoint
-    ├── services/               # Graph API client
-    └── utils/                  # Authentication helpers
+└── backend/                     # Azure Functions v4 (Node.js)
+    ├── index.js                # All HTTP endpoints (v4 programming model)
+    ├── services/               # Business logic services
+    │   ├── graphClient.js     # Microsoft Graph API client
+    │   ├── storageService.js  # Azure Table Storage
+    │   ├── slackService.js    # Slack integration
+    │   ├── taskPollingService.js  # Task change notifications
+    │   └── morningDigestService.js # Daily digest emails
+    ├── scripts/               # Utility scripts
+    └── utils/                 # Authentication helpers
 ```
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 18+
+- Node.js 20+
 - Azure subscription (for deployment)
 - Microsoft 365 account
+- Azurite (Azure Storage Emulator for local development)
 
 ### Local Development
 
@@ -60,7 +70,16 @@ TaskCommand/
    # → http://localhost:5173
    ```
 
-3. **Backend Setup** (for Manager Dashboard)
+3. **Start Azurite** (Azure Storage Emulator)
+   ```bash
+   # Install globally if you haven't already
+   npm install -g azurite
+
+   # Start Azurite in a separate terminal
+   azurite --silent --location /tmp/azurite
+   ```
+
+4. **Backend Setup** (for Manager Dashboard & Slack integration)
    ```bash
    cd backend
    cp local.settings.json.template local.settings.json
@@ -70,7 +89,7 @@ TaskCommand/
    # → http://localhost:7071
    ```
 
-4. **Open your browser**
+5. **Open your browser**
    ```
    http://localhost:5173
    ```
@@ -98,11 +117,19 @@ VITE_BACKEND_URL=http://localhost:7071
 **Backend** (`backend/local.settings.json`):
 ```json
 {
+  "IsEncrypted": false,
   "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
     "AZURE_TENANT_ID": "your-tenant-id",
     "AZURE_CLIENT_ID": "your-backend-client-id",
     "AZURE_CLIENT_SECRET": "your-client-secret",
-    "FRONTEND_CLIENT_ID": "your-frontend-client-id"
+    "FRONTEND_CLIENT_ID": "your-frontend-client-id",
+    "ALLOWED_ORIGINS": "http://localhost:5173"
+  },
+  "Host": {
+    "CORS": "*",
+    "CORSCredentials": false
   }
 }
 ```

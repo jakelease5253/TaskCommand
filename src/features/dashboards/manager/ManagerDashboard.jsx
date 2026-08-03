@@ -1,10 +1,18 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { AlertCircle, Users, Calendar, Target, TrendingUp, Archive, Search, X, ChevronUp, ChevronDown, RefreshCw } from "../../../components/ui/icons";
+import { AlertCircle, Users, Calendar, Target, TrendingUp, Archive, Search, X, ChevronUp, ChevronDown, RefreshCw, Plus } from "../../../components/ui/icons";
+import NewTaskModal from "../../../components/tasks/NewTaskModal";
+import DateRangeMultiSelect from "../../../components/tasks/DateRangeMultiSelect";
+import ThemedSelect from "../../../components/tasks/ThemedSelect";
+import { matchesDateRanges } from "../../../utils/dateFilters";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:7071';
 
 export default function ManagerDashboard({
   accessToken,
+  selectedTaskIds = new Set(),
+  onToggleSelection,
+  onSelectAll,
+  onClearSelection,
   onEditTask,
 }) {
   // Backend data state
@@ -25,7 +33,7 @@ export default function ManagerDashboard({
   const [selectedAssignees, setSelectedAssignees] = useState([]);
   const [selectedPlans, setSelectedPlans] = useState([]);
   const [selectedStatuses, setSelectedStatuses] = useState([]);
-  const [dateRange, setDateRange] = useState('all'); // all, overdue, thisWeek, thisMonth, backlog, custom
+  const [selectedDateRanges, setSelectedDateRanges] = useState([]); // Array of: 'all', 'overdue', 'today', 'tomorrow', 'thisWeek', 'nextWeek', 'backlog'
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
 
@@ -41,6 +49,9 @@ export default function ManagerDashboard({
 
   // Track tasks currently being completed
   const [completingTasks, setCompletingTasks] = useState(new Set());
+
+  // New task modal state
+  const [showNewTaskModal, setShowNewTaskModal] = useState(false);
 
   // Fetch company-wide data from backend
   const fetchCompanyTasks = async () => {
@@ -110,6 +121,24 @@ export default function ManagerDashboard({
     } finally {
       setRefreshing(false);
     }
+  };
+
+  // Helper functions - defined early to avoid hoisting issues
+  const getTaskStatus = (task) => {
+    if (task.percentComplete === 100) return 'completed';
+    if (task.percentComplete > 0) return 'in-progress';
+    return 'not-started';
+  };
+
+  const getPriorityLabel = (priority) => {
+    const labels = { 1: 'Urgent', 3: 'Important', 5: 'Medium', 9: 'Low' };
+    return labels[priority] || 'Medium';
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'No due date';
+    const date = new Date(dateString);
+    return date.toLocaleDateString();
   };
 
   // Get all incomplete tasks for metrics and display
@@ -187,7 +216,10 @@ export default function ManagerDashboard({
       filtered = filtered.filter(task => {
         const titleMatch = task.title?.toLowerCase().includes(query);
         const planMatch = companyData.plans[task.planId]?.toLowerCase().includes(query);
-        const bucketMatch = companyData.buckets[task.planId]?.find(b => b.id === task.bucketId)?.name?.toLowerCase().includes(query);
+        const planBuckets = companyData.buckets[task.planId];
+        const bucketMatch = Array.isArray(planBuckets)
+          ? planBuckets.find(b => b.id === task.bucketId)?.name?.toLowerCase().includes(query)
+          : false;
         return titleMatch || planMatch || bucketMatch;
       });
     }
@@ -195,8 +227,14 @@ export default function ManagerDashboard({
     // Filter by assignees
     if (selectedAssignees.length > 0) {
       filtered = filtered.filter(task => {
-        if (!task.assignments) return false;
-        return selectedAssignees.some(assigneeId => task.assignments[assigneeId]);
+        return selectedAssignees.some(assigneeId => {
+          // Special case: filter for unassigned tasks
+          if (assigneeId === '__unassigned__') {
+            return !task.assignments || Object.keys(task.assignments).length === 0;
+          }
+          // Normal case: filter by specific assignee
+          return task.assignments && task.assignments[assigneeId];
+        });
       });
     }
 
@@ -208,89 +246,66 @@ export default function ManagerDashboard({
     // Filter by statuses
     if (selectedStatuses.length > 0) {
       filtered = filtered.filter(task => {
-        const status = getTaskStatus(task);
-        return selectedStatuses.includes(status);
+        try {
+          const status = getTaskStatus(task);
+          return selectedStatuses.includes(status);
+        } catch (err) {
+          console.error('Error getting task status:', err, task);
+          return false;
+        }
       });
     }
 
-    // Filter by date range
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-
-    if (dateRange !== 'all') {
-      filtered = filtered.filter(task => {
-        if (dateRange === 'backlog') {
-          return !task.dueDateTime;
-        }
-
-        if (!task.dueDateTime) return false;
-
-        const dueDate = new Date(task.dueDateTime);
-        dueDate.setHours(0, 0, 0, 0);
-
-        if (dateRange === 'overdue') {
-          return dueDate < now;
-        } else if (dateRange === 'thisWeek') {
-          const weekFromNow = new Date(now);
-          weekFromNow.setDate(weekFromNow.getDate() + 7);
-          return dueDate >= now && dueDate <= weekFromNow;
-        } else if (dateRange === 'thisMonth') {
-          const monthFromNow = new Date(now);
-          monthFromNow.setMonth(monthFromNow.getMonth() + 1);
-          return dueDate >= now && dueDate <= monthFromNow;
-        } else if (dateRange === 'custom') {
-          if (customStartDate && customEndDate) {
-            const startDate = new Date(customStartDate);
-            startDate.setHours(0, 0, 0, 0);
-            const endDate = new Date(customEndDate);
-            endDate.setHours(23, 59, 59, 999);
-            return dueDate >= startDate && dueDate <= endDate;
-          }
-        }
-        return true;
-      });
-    }
+    // Filter by date range (multi-select)
+    filtered = filtered.filter(task =>
+      matchesDateRanges(task, selectedDateRanges, customStartDate, customEndDate)
+    );
 
     // Apply sorting
     filtered.sort((a, b) => {
-      let aVal, bVal;
+      try {
+        let aVal, bVal;
 
-      switch (sortBy) {
-        case 'taskName':
-          aVal = a.title?.toLowerCase() || '';
-          bVal = b.title?.toLowerCase() || '';
-          break;
-        case 'assignee':
-          aVal = a.assignments ? Object.keys(a.assignments)[0] || '' : '';
-          bVal = b.assignments ? Object.keys(b.assignments)[0] || '' : '';
-          break;
-        case 'plan':
-          aVal = companyData.plans[a.planId] || '';
-          bVal = companyData.plans[b.planId] || '';
-          break;
-        case 'status':
-          aVal = getTaskStatus(a);
-          bVal = getTaskStatus(b);
-          break;
-        case 'dueDate':
-          aVal = a.dueDateTime ? new Date(a.dueDateTime).getTime() : Infinity;
-          bVal = b.dueDateTime ? new Date(b.dueDateTime).getTime() : Infinity;
-          break;
-        case 'priority':
-          aVal = a.priority || 5;
-          bVal = b.priority || 5;
-          break;
-        default:
-          return 0;
+        switch (sortBy) {
+          case 'taskName':
+            aVal = a.title?.toLowerCase() || '';
+            bVal = b.title?.toLowerCase() || '';
+            break;
+          case 'assignee':
+            aVal = a.assignments ? Object.keys(a.assignments)[0] || '' : '';
+            bVal = b.assignments ? Object.keys(b.assignments)[0] || '' : '';
+            break;
+          case 'plan':
+            aVal = companyData.plans[a.planId] || '';
+            bVal = companyData.plans[b.planId] || '';
+            break;
+          case 'status':
+            aVal = getTaskStatus(a);
+            bVal = getTaskStatus(b);
+            break;
+          case 'dueDate':
+            aVal = a.dueDateTime ? new Date(a.dueDateTime).getTime() : Infinity;
+            bVal = b.dueDateTime ? new Date(b.dueDateTime).getTime() : Infinity;
+            break;
+          case 'priority':
+            aVal = a.priority || 5;
+            bVal = b.priority || 5;
+            break;
+          default:
+            return 0;
+        }
+
+        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      } catch (err) {
+        console.error('Error sorting tasks:', err, a, b);
+        return 0;
       }
-
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
     });
 
     return filtered;
-  }, [incompleteTasks, searchQuery, selectedAssignees, selectedPlans, selectedStatuses, dateRange, sortBy, sortDirection, companyData]);
+  }, [incompleteTasks, companyData, searchQuery, selectedAssignees, selectedPlans, selectedStatuses, selectedDateRanges, customStartDate, customEndDate, sortBy, sortDirection]);
 
   // Virtual scrolling: Calculate which tasks to render
   const visibleTasks = useMemo(() => {
@@ -301,24 +316,6 @@ export default function ManagerDashboard({
       index: startIndex + idx
     }));
   }, [filteredAndSortedTasks, scrollTop]);
-
-  // Helper functions
-  const getTaskStatus = (task) => {
-    if (task.percentComplete === 100) return 'completed';
-    if (task.percentComplete > 0) return 'in-progress';
-    return 'not-started';
-  };
-
-  const getPriorityLabel = (priority) => {
-    const labels = { 1: 'Urgent', 3: 'Important', 5: 'Medium', 9: 'Low' };
-    return labels[priority] || 'Medium';
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return 'No due date';
-    const date = new Date(dateString);
-    return date.toLocaleDateString();
-  };
 
   const handleSort = (column) => {
     if (sortBy === column) {
@@ -334,7 +331,7 @@ export default function ManagerDashboard({
     setSelectedAssignees([]);
     setSelectedPlans([]);
     setSelectedStatuses([]);
-    setDateRange('all');
+    setSelectedDateRanges([]);
     setCustomStartDate('');
     setCustomEndDate('');
   };
@@ -352,16 +349,19 @@ export default function ManagerDashboard({
         );
         break;
       case 'status':
-        setSelectedStatuses(prev =>
-          prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
-        );
+        setSelectedStatuses(prev => {
+          const newStatuses = prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value];
+          // Debug logging removed - was causing 1000+ console messages with large task lists
+          // console.log('Status filter toggled:', value, 'New statuses:', newStatuses);
+          return newStatuses;
+        });
         break;
     }
   };
 
   const hasActiveFilters = searchQuery || selectedAssignees.length > 0 ||
                           selectedPlans.length > 0 || selectedStatuses.length > 0 ||
-                          dateRange !== 'all' || customStartDate || customEndDate;
+                          selectedDateRanges.length > 0 || customStartDate || customEndDate;
 
   // Handle task completion with optimistic updates
   const handleCompleteTask = async (taskId, event) => {
@@ -381,10 +381,14 @@ export default function ManagerDashboard({
     // Mark task as completing
     setCompletingTasks(prev => new Set([...prev, taskId]));
 
-    // Optimistically remove the task from local state immediately
+    // Optimistically update the task to completed (percentComplete: 100)
     setCompanyData(prev => ({
       ...prev,
-      tasks: prev.tasks.filter(task => task.id !== taskId)
+      tasks: prev.tasks.map(task =>
+        task.id === taskId
+          ? { ...task, percentComplete: 100 }
+          : task
+      )
     }));
 
     // Call backend endpoint to complete task with application permissions
@@ -432,8 +436,14 @@ export default function ManagerDashboard({
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-          <p className="mt-4 text-slate-600">Loading company-wide tasks...</p>
+          <div
+            className="inline-block animate-spin rounded-full h-12 w-12"
+            style={{
+              border: '4px solid #e5e7eb',
+              borderTopColor: 'var(--theme-primary)'
+            }}
+          ></div>
+          <p className="mt-4 text-slate-600" style={{ fontFamily: 'Poppins' }}>Loading company-wide tasks...</p>
         </div>
       </div>
     );
@@ -460,28 +470,86 @@ export default function ManagerDashboard({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Manager Dashboard</h2>
+          <h2 style={{
+            fontSize: '32px',
+            fontWeight: '700',
+            fontFamily: 'Poppins',
+            color: 'var(--theme-primary-dark)'
+          }}>Manager Dashboard</h2>
           <div className="flex items-center gap-3 mt-1">
-            <p className="text-sm text-slate-600">Company-wide task overview • {companyData.tasks.length} total tasks</p>
+            <p style={{
+              fontSize: '14px',
+              fontFamily: 'Poppins',
+              color: '#64748b'
+            }}>Company-wide task overview • {companyData.tasks.length} total tasks</p>
             {completingTasks.size > 0 && (
-              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-lg animate-pulse">
+              <span className="inline-flex items-center gap-1 px-2 py-1 animate-pulse" style={{
+                backgroundColor: '#fff9e6',
+                color: 'var(--theme-primary-dark)',
+                fontSize: '12px',
+                fontWeight: '500',
+                fontFamily: 'Poppins',
+                borderRadius: '8px'
+              }}>
                 <RefreshCw className="w-3 h-3 animate-spin" />
                 Completing {completingTasks.size} task{completingTasks.size !== 1 ? 's' : ''}...
               </span>
             )}
           </div>
         </div>
-        <button
-          onClick={handleManualRefresh}
-          disabled={refreshing}
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Refresh data"
-        >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-          <span className="text-sm font-medium text-slate-700">
-            {refreshing ? 'Refreshing...' : 'Refresh'}
-          </span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowNewTaskModal(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              backgroundColor: 'var(--theme-primary)',
+              color: 'var(--theme-primary-dark)',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontFamily: 'Poppins',
+              fontWeight: '500',
+              fontSize: '14px',
+              boxShadow: '0px 2px 8px rgba(0,0,0,0.15)',
+              transition: 'opacity 0.2s'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.opacity = '0.9'}
+            onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
+            title="Create new task"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Task</span>
+          </button>
+          <button
+            onClick={handleManualRefresh}
+            disabled={refreshing}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              backgroundColor: 'var(--theme-primary-dark)',
+              color: 'var(--theme-primary)',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: refreshing ? 'not-allowed' : 'pointer',
+              fontFamily: 'Poppins',
+              fontWeight: '500',
+              fontSize: '14px',
+              boxShadow: '0px 2px 8px rgba(0,0,0,0.15)',
+              opacity: refreshing ? 0.5 : 1
+            }}
+            title="Refresh data"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            <span>
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* Metrics Cards */}
@@ -489,13 +557,13 @@ export default function ManagerDashboard({
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-slate-500">Open Tasks</p>
-              <div className="text-2xl font-bold text-slate-800 mt-1">
+              <p style={{ fontSize: '12px', color: '#64748b', fontFamily: 'Poppins', fontWeight: '500' }}>Open Tasks</p>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: 'var(--theme-primary-dark)', fontFamily: 'Poppins', marginTop: '4px' }}>
                 {metrics.openTasks}
               </div>
             </div>
-            <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-              <AlertCircle className="text-blue-600" />
+            <div style={{ width: '40px', height: '40px', backgroundColor: 'var(--theme-primary)', borderRadius: '8px' }} className="flex items-center justify-center">
+              <AlertCircle style={{ color: 'var(--theme-primary-dark)' }} />
             </div>
           </div>
         </div>
@@ -503,13 +571,13 @@ export default function ManagerDashboard({
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-slate-500">Overdue</p>
-              <div className="text-2xl font-bold text-red-600 mt-1">
+              <p style={{ fontSize: '12px', color: '#64748b', fontFamily: 'Poppins', fontWeight: '500' }}>Overdue</p>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: '#dc2626', fontFamily: 'Poppins', marginTop: '4px' }}>
                 {metrics.overdueTasks}
               </div>
             </div>
-            <div className="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center">
-              <AlertCircle className="text-red-600" />
+            <div style={{ width: '40px', height: '40px', backgroundColor: 'var(--theme-primary-dark)', borderRadius: '8px' }} className="flex items-center justify-center">
+              <AlertCircle style={{ color: 'var(--theme-primary)' }} />
             </div>
           </div>
         </div>
@@ -517,13 +585,13 @@ export default function ManagerDashboard({
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-slate-500">In Focus</p>
-              <div className="text-2xl font-bold text-indigo-600 mt-1">
+              <p style={{ fontSize: '12px', color: '#64748b', fontFamily: 'Poppins', fontWeight: '500' }}>In Focus</p>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: 'var(--theme-primary-dark)', fontFamily: 'Poppins', marginTop: '4px' }}>
                 {metrics.tasksInFocus}
               </div>
             </div>
-            <div className="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center">
-              <Target className="text-indigo-600" />
+            <div style={{ width: '40px', height: '40px', backgroundColor: 'var(--theme-primary)', borderRadius: '8px' }} className="flex items-center justify-center">
+              <Target style={{ color: 'var(--theme-primary-dark)' }} />
             </div>
           </div>
         </div>
@@ -531,13 +599,13 @@ export default function ManagerDashboard({
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-slate-500">Due This Week</p>
-              <div className="text-2xl font-bold text-orange-600 mt-1">
+              <p style={{ fontSize: '12px', color: '#64748b', fontFamily: 'Poppins', fontWeight: '500' }}>Due This Week</p>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: 'var(--theme-primary-dark)', fontFamily: 'Poppins', marginTop: '4px' }}>
                 {metrics.dueThisWeek}
               </div>
             </div>
-            <div className="w-10 h-10 bg-orange-50 rounded-lg flex items-center justify-center">
-              <Calendar className="text-orange-600" />
+            <div style={{ width: '40px', height: '40px', backgroundColor: 'var(--theme-primary-dark)', borderRadius: '8px' }} className="flex items-center justify-center">
+              <Calendar style={{ color: 'var(--theme-primary)' }} />
             </div>
           </div>
         </div>
@@ -545,13 +613,13 @@ export default function ManagerDashboard({
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-slate-500">Due Later</p>
-              <div className="text-2xl font-bold text-slate-800 mt-1">
+              <p style={{ fontSize: '12px', color: '#64748b', fontFamily: 'Poppins', fontWeight: '500' }}>Due Later</p>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: 'var(--theme-primary-dark)', fontFamily: 'Poppins', marginTop: '4px' }}>
                 {metrics.dueAfterWeek}
               </div>
             </div>
-            <div className="w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center">
-              <TrendingUp className="text-slate-600" />
+            <div style={{ width: '40px', height: '40px', backgroundColor: 'var(--theme-primary)', borderRadius: '8px' }} className="flex items-center justify-center">
+              <TrendingUp style={{ color: 'var(--theme-primary-dark)' }} />
             </div>
           </div>
         </div>
@@ -559,13 +627,13 @@ export default function ManagerDashboard({
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-slate-500">Backlogged</p>
-              <div className="text-2xl font-bold text-slate-800 mt-1">
+              <p style={{ fontSize: '12px', color: '#64748b', fontFamily: 'Poppins', fontWeight: '500' }}>Backlogged</p>
+              <div style={{ fontSize: '24px', fontWeight: '700', color: 'var(--theme-primary-dark)', fontFamily: 'Poppins', marginTop: '4px' }}>
                 {metrics.backlogged}
               </div>
             </div>
-            <div className="w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center">
-              <Archive className="text-slate-600" />
+            <div style={{ width: '40px', height: '40px', backgroundColor: 'var(--theme-primary-dark)', borderRadius: '8px' }} className="flex items-center justify-center">
+              <Archive style={{ color: 'var(--theme-primary)' }} />
             </div>
           </div>
         </div>
@@ -582,7 +650,26 @@ export default function ManagerDashboard({
               placeholder="Search tasks by name, plan, or bucket..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-10 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              style={{
+                width: '100%',
+                paddingLeft: '40px',
+                paddingRight: '40px',
+                paddingTop: '8px',
+                paddingBottom: '8px',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                fontFamily: 'Poppins',
+                fontSize: '14px',
+                outline: 'none'
+              }}
+              onFocus={(e) => {
+                e.target.style.boxShadow = '0 0 0 2px var(--theme-primary)';
+                e.target.style.borderColor = 'transparent';
+              }}
+              onBlur={(e) => {
+                e.target.style.boxShadow = 'none';
+                e.target.style.borderColor = '#d1d5db';
+              }}
             />
             {searchQuery && (
               <button
@@ -596,7 +683,20 @@ export default function ManagerDashboard({
           {hasActiveFilters && (
             <button
               onClick={clearAllFilters}
-              className="px-4 py-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
+              style={{
+                padding: '8px 16px',
+                fontSize: '14px',
+                fontWeight: '500',
+                fontFamily: 'Poppins',
+                color: 'var(--theme-primary-dark)',
+                backgroundColor: 'var(--theme-primary)',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                transition: 'opacity 0.2s'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.opacity = '0.9'}
+              onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
             >
               Clear All
             </button>
@@ -606,59 +706,47 @@ export default function ManagerDashboard({
         {/* Filter Chips */}
         <div className="flex flex-wrap gap-3">
           {/* Date Range Filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-slate-600">Date:</span>
-            <select
-              value={dateRange}
-              onChange={(e) => setDateRange(e.target.value)}
-              className="text-sm px-3 py-1 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="all">All</option>
-              <option value="overdue">Overdue</option>
-              <option value="thisWeek">This Week</option>
-              <option value="thisMonth">This Month</option>
-              <option value="backlog">Backlog</option>
-              <option value="custom">Custom Range</option>
-            </select>
-          </div>
-
-          {/* Custom Date Range Pickers */}
-          {dateRange === 'custom' && (
-            <>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-slate-600">From:</span>
-                <input
-                  type="date"
-                  value={customStartDate}
-                  onChange={(e) => setCustomStartDate(e.target.value)}
-                  className="text-sm px-3 py-1 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-slate-600">To:</span>
-                <input
-                  type="date"
-                  value={customEndDate}
-                  onChange={(e) => setCustomEndDate(e.target.value)}
-                  className="text-sm px-3 py-1 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-            </>
-          )}
+          <DateRangeMultiSelect
+            selectedRanges={selectedDateRanges}
+            onChange={setSelectedDateRanges}
+            customStartDate={customStartDate}
+            customEndDate={customEndDate}
+            onCustomDateChange={(start, end) => {
+              setCustomStartDate(start);
+              setCustomEndDate(end);
+            }}
+          />
 
           {/* Status Filter */}
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-slate-600">Status:</span>
+            <span style={{ fontSize: '12px', fontWeight: '500', color: '#64748b', fontFamily: 'Poppins' }}>Status:</span>
             <div className="flex gap-1">
-              {['not-started', 'in-progress'].map(status => (
+              {['not-started', 'in-progress', 'completed'].map(status => (
                 <button
                   key={status}
                   onClick={() => toggleFilter('status', status)}
-                  className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
-                    selectedStatuses.includes(status)
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
+                  style={{
+                    padding: '4px 12px',
+                    fontSize: '12px',
+                    fontWeight: '500',
+                    fontFamily: 'Poppins',
+                    borderRadius: '8px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    backgroundColor: selectedStatuses.includes(status) ? 'var(--theme-primary)' : '#f1f5f9',
+                    color: selectedStatuses.includes(status) ? 'var(--theme-primary-dark)' : '#475569'
+                  }}
+                  onMouseOver={(e) => {
+                    if (!selectedStatuses.includes(status)) {
+                      e.currentTarget.style.backgroundColor = '#e2e8f0';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    if (!selectedStatuses.includes(status)) {
+                      e.currentTarget.style.backgroundColor = '#f1f5f9';
+                    }
+                  }}
                 >
                   {status.replace('-', ' ')}
                 </button>
@@ -668,40 +756,37 @@ export default function ManagerDashboard({
 
           {/* Assignee Filter */}
           {uniqueAssignees.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-slate-600">Assignee:</span>
-              <select
-                value=""
-                onChange={(e) => e.target.value && toggleFilter('assignee', e.target.value)}
-                className="text-sm px-3 py-1 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="">Select assignee...</option>
-                {uniqueAssignees.map(userId => (
-                  <option key={userId} value={userId}>
-                    {companyData.userProfiles[userId] || 'User'}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <ThemedSelect
+              value=""
+              onChange={(value) => value && toggleFilter('assignee', value)}
+              options={[
+                { value: '', label: 'Select assignee...' },
+                { value: '__unassigned__', label: 'Unassigned' },
+                ...uniqueAssignees.map(userId => ({
+                  value: userId,
+                  label: companyData.userProfiles[userId] || 'User'
+                }))
+              ]}
+              placeholder="Select assignee..."
+              label="Assignee"
+            />
           )}
 
           {/* Plan Filter */}
           {uniquePlans.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-slate-600">Plan:</span>
-              <select
-                value=""
-                onChange={(e) => e.target.value && toggleFilter('plan', e.target.value)}
-                className="text-sm px-3 py-1 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="">Select plan...</option>
-                {uniquePlans.map(planId => (
-                  <option key={planId} value={planId}>
-                    {companyData.plans[planId]}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <ThemedSelect
+              value=""
+              onChange={(value) => value && toggleFilter('plan', value)}
+              options={[
+                { value: '', label: 'Select plan...' },
+                ...uniquePlans.map(planId => ({
+                  value: planId,
+                  label: companyData.plans[planId]
+                }))
+              ]}
+              placeholder="Select plan..."
+              label="Plan"
+            />
           )}
         </div>
 
@@ -709,17 +794,33 @@ export default function ManagerDashboard({
         {(selectedPlans.length > 0 || selectedAssignees.length > 0) && (
           <div className="flex flex-wrap gap-2">
             {selectedPlans.map(planId => (
-              <span key={planId} className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-700 text-xs font-medium rounded-lg">
+              <span key={planId} className="inline-flex items-center gap-1" style={{
+                padding: '4px 8px',
+                backgroundColor: '#fff9e6',
+                color: 'var(--theme-primary-dark)',
+                fontSize: '12px',
+                fontWeight: '500',
+                fontFamily: 'Poppins',
+                borderRadius: '8px'
+              }}>
                 {companyData.plans[planId]}
-                <button onClick={() => toggleFilter('plan', planId)} className="hover:text-indigo-900">
+                <button onClick={() => toggleFilter('plan', planId)} style={{ color: 'var(--theme-primary-dark)' }} className="hover:opacity-70">
                   <X className="w-3 h-3" />
                 </button>
               </span>
             ))}
             {selectedAssignees.map(userId => (
-              <span key={userId} className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-700 text-xs font-medium rounded-lg">
-                {companyData.userProfiles[userId]}
-                <button onClick={() => toggleFilter('assignee', userId)} className="hover:text-indigo-900">
+              <span key={userId} className="inline-flex items-center gap-1" style={{
+                padding: '4px 8px',
+                backgroundColor: '#fff9e6',
+                color: 'var(--theme-primary-dark)',
+                fontSize: '12px',
+                fontWeight: '500',
+                fontFamily: 'Poppins',
+                borderRadius: '8px'
+              }}>
+                {userId === '__unassigned__' ? 'Unassigned' : companyData.userProfiles[userId]}
+                <button onClick={() => toggleFilter('assignee', userId)} style={{ color: 'var(--theme-primary-dark)' }} className="hover:opacity-70">
                   <X className="w-3 h-3" />
                 </button>
               </span>
@@ -731,10 +832,19 @@ export default function ManagerDashboard({
       {/* Task Table with Virtual Scrolling */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-4 flex items-center justify-between border-b border-slate-200">
-          <h3 className="text-sm font-semibold text-slate-800">
+          <h3 style={{
+            fontSize: '14px',
+            fontWeight: '600',
+            fontFamily: 'Poppins',
+            color: 'var(--theme-primary-dark)'
+          }}>
             Tasks ({filteredAndSortedTasks.length} {hasActiveFilters && `of ${incompleteTasks.length}`})
           </h3>
-          <span className="text-xs text-slate-500">Click column headers to sort</span>
+          <span style={{
+            fontSize: '12px',
+            fontFamily: 'Poppins',
+            color: '#64748b'
+          }}>Click column headers to sort</span>
         </div>
 
         <div
@@ -745,18 +855,30 @@ export default function ManagerDashboard({
         >
           <table className="w-full table-fixed">
             <colgroup>
-              <col style={{ width: '5%' }} />
-              <col style={{ width: '28%' }} />
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '18%' }} />
-              <col style={{ width: '12%' }} />
+              <col style={{ width: '4%' }} />
+              <col style={{ width: '22%' }} />
               <col style={{ width: '13%' }} />
+              <col style={{ width: '16%' }} />
+              <col style={{ width: '11%' }} />
+              <col style={{ width: '12%' }} />
               <col style={{ width: '10%' }} />
+              <col style={{ width: '12%' }} />
             </colgroup>
             <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
               <tr>
                 <th className="px-4 py-3 text-center text-xs font-medium text-slate-600 uppercase">
-                  Done
+                  <input
+                    type="checkbox"
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        onSelectAll && onSelectAll(filteredAndSortedTasks.map(t => t.id));
+                      } else {
+                        onClearSelection && onClearSelection();
+                      }
+                    }}
+                    className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
+                    title="Select all"
+                  />
                 </th>
                 <th
                   onClick={() => handleSort('taskName')}
@@ -824,9 +946,19 @@ export default function ManagerDashboard({
                     )}
                   </div>
                 </th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-slate-600 uppercase">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
+              {/* Spacer for rows above viewport */}
+              {scrollTop > 0 && (
+                <tr style={{ height: `${Math.floor(scrollTop / ROW_HEIGHT) * ROW_HEIGHT}px` }}>
+                  <td colSpan="8"></td>
+                </tr>
+              )}
+
               {visibleTasks.map(({ task, index }) => (
                 <tr
                   key={task.id}
@@ -834,15 +966,16 @@ export default function ManagerDashboard({
                   className="hover:bg-slate-50 cursor-pointer transition-colors"
                   style={{
                     height: `${ROW_HEIGHT}px`,
+                    backgroundColor: selectedTaskIds && selectedTaskIds.has(task.id) ? '#fff9e6' : ''
                   }}
                 >
                   <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
-                      checked={false}
-                      onChange={(e) => handleCompleteTask(task.id, e)}
+                      checked={selectedTaskIds && selectedTaskIds.has(task.id)}
+                      onChange={() => onToggleSelection && onToggleSelection(task.id)}
                       className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
-                      title="Mark as complete"
+                      onClick={(e) => e.stopPropagation()}
                     />
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-800 truncate">{task.title}</td>
@@ -876,17 +1009,69 @@ export default function ManagerDashboard({
                       {getPriorityLabel(task.priority)}
                     </span>
                   </td>
+                  <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={(e) => handleCompleteTask(task.id, e)}
+                      style={{
+                        padding: '4px 12px',
+                        fontSize: '12px',
+                        fontWeight: '500',
+                        fontFamily: 'Poppins',
+                        color: 'var(--theme-primary-dark)',
+                        backgroundColor: '#86efac',
+                        border: '1px solid #4ade80',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        transition: 'opacity 0.2s'
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.opacity = '0.8'}
+                      onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
+                      title="Mark as complete"
+                    >
+                      Complete
+                    </button>
+                  </td>
                 </tr>
               ))}
+
+              {/* Spacer for rows below viewport */}
+              {(() => {
+                const startIndex = Math.floor(scrollTop / ROW_HEIGHT);
+                const endIndex = Math.min(startIndex + VISIBLE_ROWS, filteredAndSortedTasks.length);
+                const remainingHeight = (filteredAndSortedTasks.length - endIndex) * ROW_HEIGHT;
+                return remainingHeight > 0 ? (
+                  <tr style={{ height: `${remainingHeight}px` }}>
+                    <td colSpan="8"></td>
+                  </tr>
+                ) : null;
+              })()}
             </tbody>
           </table>
           {filteredAndSortedTasks.length === 0 && (
-            <div className="p-8 text-center text-slate-600">
+            <div className="p-8 text-center" style={{
+              color: '#64748b',
+              fontFamily: 'Poppins',
+              fontSize: '14px'
+            }}>
               No tasks found matching filters
             </div>
           )}
         </div>
       </div>
+
+      {/* New Task Modal */}
+      {showNewTaskModal && (
+        <NewTaskModal
+          accessToken={accessToken}
+          plans={companyData.plans}
+          buckets={companyData.buckets}
+          onClose={() => setShowNewTaskModal(false)}
+          onTaskCreated={() => {
+            setShowNewTaskModal(false);
+            handleManualRefresh(); // Refresh the task list after creating
+          }}
+        />
+      )}
     </div>
   );
 }

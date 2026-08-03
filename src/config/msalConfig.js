@@ -6,4 +6,4 @@ export const MSAL_CONFIG = {
   }
 };
 
-export const GRAPH_SCOPES = (import.meta.env.VITE_GRAPH_SCOPES || 'Tasks.ReadWrite,Group.Read.All,User.Read').split(',');
+export const GRAPH_SCOPES = (import.meta.env.VITE_GRAPH_SCOPES || 'Tasks.ReadWrite,Group.ReadWrite.All,User.Read').split(',');

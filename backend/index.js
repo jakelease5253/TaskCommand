@@ -9,6 +9,7 @@ const slackCommands = require('./services/slackCommands');
 const taskPollingService = require('./services/taskPollingService');
 const morningDigestService = require('./services/morningDigestService');
 const { getTaskComments, addTaskComment } = require('./services/commentService');
+const { signState, verifyState } = require('./utils/oauthState');
 
 // CORS: echo the request's origin when it's in the ALLOWED_ORIGINS list.
 // A comma-separated list must never be sent as the header value directly -
@@ -493,6 +494,99 @@ app.http('ReopenTask', {
 });
 
 /**
+ * Azure Function: Slack OAuth Start
+ *
+ * Endpoint: GET /api/slack/oauth/start?returnOrigin=<origin>
+ * Auth: Requires valid user token
+ *
+ * Builds the Slack authorize URL with an HMAC-signed state. The user id in
+ * the state comes from the validated token (never from the client), and the
+ * return origin must be in the CORS allowlist.
+ */
+app.http('SlackOAuthStart', {
+  methods: ['GET', 'OPTIONS'],
+  route: 'slack/oauth/start',
+  authLevel: 'anonymous',
+  handler: async (request, context) => {
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': corsOrigin(request),
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true',
+      'Content-Type': 'application/json'
+    };
+
+    if (request.method === 'OPTIONS') {
+      return { status: 204, headers: corsHeaders };
+    }
+
+    try {
+      const authHeader = request.headers.get('authorization');
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return {
+          status: 401,
+          headers: corsHeaders,
+          jsonBody: { error: 'Unauthorized', message: 'Authorization header with Bearer token required' }
+        };
+      }
+
+      let user;
+      try {
+        user = await validateUserToken(authHeader.substring(7));
+      } catch (err) {
+        return {
+          status: 401,
+          headers: corsHeaders,
+          jsonBody: { error: 'Unauthorized', message: 'Invalid or expired token' }
+        };
+      }
+
+      // Only redirect back to origins we already trust for CORS
+      const requestedOrigin = request.query.get('returnOrigin');
+      const returnOrigin = ALLOWED_ORIGIN_LIST.includes(requestedOrigin)
+        ? requestedOrigin
+        : (process.env.FRONTEND_URL || 'http://localhost:5173');
+
+      // Callback URL on this same host (restore https behind the proxy)
+      let redirectUri = request.url.split('?')[0].replace(/\/start$/, '/callback');
+      const forwardedProto = request.headers.get('x-forwarded-proto');
+      if (forwardedProto === 'https' && redirectUri.startsWith('http://')) {
+        redirectUri = redirectUri.replace('http://', 'https://');
+      }
+
+      const state = signState({ userId: user.id, returnOrigin });
+
+      const scopes = [
+        'chat:write',
+        'commands',
+        'users:read',
+        'im:write',
+        'im:history',
+        'reactions:read',
+        'channels:history'
+      ].join(',');
+
+      const url =
+        'https://slack.com/oauth/v2/authorize' +
+        `?client_id=${encodeURIComponent(process.env.SLACK_CLIENT_ID)}` +
+        `&scope=${encodeURIComponent(scopes)}` +
+        `&user_scope=` +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&state=${encodeURIComponent(state)}`;
+
+      return { status: 200, headers: corsHeaders, jsonBody: { url } };
+    } catch (error) {
+      context.error('Error in SlackOAuthStart:', error);
+      return {
+        status: 500,
+        headers: corsHeaders,
+        jsonBody: { error: 'Internal Server Error' }
+      };
+    }
+  }
+});
+
+/**
  * Azure Function: Slack OAuth Callback
  *
  * Endpoint: GET /api/slack/oauth/callback
@@ -533,13 +627,12 @@ app.http('SlackOAuthCallback', {
         };
       }
 
-      // Decode and parse state parameter
+      // Verify the HMAC-signed state issued by /api/slack/oauth/start
       let stateData;
       try {
-        stateData = JSON.parse(Buffer.from(state, 'base64').toString('utf-8'));
-        context.log(`State data: ${JSON.stringify(stateData)}`);
+        stateData = verifyState(state);
       } catch (err) {
-        context.error('Invalid state parameter:', err);
+        context.error('State verification failed:', err.message);
         return {
           status: 400,
           body: 'Invalid state parameter'
@@ -547,7 +640,7 @@ app.http('SlackOAuthCallback', {
       }
 
       const azureUserId = stateData.userId;
-      const returnUrl = stateData.returnUrl || 'http://localhost:5173/';
+      const returnOrigin = stateData.returnOrigin || process.env.FRONTEND_URL || 'http://localhost:5173';
 
       // Exchange authorization code for access token
       context.log('Exchanging OAuth code for access token...');
@@ -566,7 +659,6 @@ app.http('SlackOAuthCallback', {
       const oauthResult = await slackService.exchangeOAuthCode(code, redirectUri);
 
       context.log(`OAuth successful. Slack User ID: ${oauthResult.authedUser.id}`);
-      context.log('OAuth result structure:', JSON.stringify(oauthResult, null, 2));
 
       // Save Slack user mapping
       // Note: We use the bot token because we're only requesting bot scopes
@@ -591,25 +683,23 @@ app.http('SlackOAuthCallback', {
       context.log('Slack connection completed successfully');
 
       // Redirect back to Settings page with success
-      const successUrl = `${returnUrl}?view=settings&slack_connected=true`;
-
       return {
         status: 302,
         headers: {
-          'Location': successUrl
+          'Location': `${returnOrigin}/?view=settings&slack_connected=true`
         }
       };
 
     } catch (error) {
+      // Log details server-side but keep the redirect generic - error
+      // messages in URLs leak internals to browser history and logs
       context.error('Error in Slack OAuth callback:', error);
-      context.error('Error message:', error.message);
-      context.error('Error stack:', error.stack);
 
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
       return {
         status: 302,
         headers: {
-          'Location': `${frontendUrl}/?view=settings&slack_error=connection_failed&error_detail=${encodeURIComponent(error.message)}`
+          'Location': `${frontendUrl}/?view=settings&slack_error=connection_failed`
         }
       };
     }

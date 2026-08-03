@@ -2,13 +2,64 @@
  * Morning Digest Service
  *
  * Sends daily digest messages to Slack with today's tasks
- * Runs every morning at 8 AM (configurable)
+ * Respects user's timezone and preferred delivery time
  */
 
 const graphClient = require('./graphClient');
 const slackService = require('./slackService');
 const slackFormatter = require('./slackFormatter');
 const storage = require('./storageService');
+
+/**
+ * Check if current time matches user's preferred digest time in their timezone
+ * @param {object} preferences - User notification preferences
+ * @returns {boolean} True if it's time to send the digest
+ */
+function isDigestTime(preferences) {
+  const userTimezone = preferences?.timezone || 'America/New_York';
+  const preferredTime = preferences?.morningDigestTime || '08:00';
+
+  // Get current time in user's timezone
+  const now = new Date();
+  const userLocalTime = new Date(now.toLocaleString('en-US', { timeZone: userTimezone }));
+
+  // Parse preferred time (format: "HH:MM")
+  const [preferredHour, preferredMinute] = preferredTime.split(':').map(Number);
+
+  const currentHour = userLocalTime.getHours();
+  const currentMinute = userLocalTime.getMinutes();
+
+  // Check if current time matches preferred time (within the same hour)
+  // We use hour matching since timer runs hourly
+  return currentHour === preferredHour && currentMinute < 60;
+}
+
+/**
+ * Check if digest was already sent today for this user
+ * @param {string} azureUserId - Azure AD user ID
+ * @param {string} timezone - User's timezone
+ * @returns {Promise<boolean>} True if already sent today
+ */
+async function wasDigestSentToday(azureUserId, timezone) {
+  try {
+    // Get last digest sent time (NOT the general task check time)
+    const lastDigest = await storage.getLastDigestSentTime(azureUserId);
+    if (!lastDigest) return false;
+
+    const lastDigestDate = new Date(lastDigest);
+    const now = new Date();
+
+    // Convert both to user's timezone for comparison
+    const lastDigestLocal = new Date(lastDigestDate.toLocaleString('en-US', { timeZone: timezone }));
+    const nowLocal = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+
+    // Check if same day in user's timezone
+    return lastDigestLocal.toDateString() === nowLocal.toDateString();
+  } catch (error) {
+    console.error(`Error checking if digest was sent today for user ${azureUserId}:`, error);
+    return false; // If error, assume not sent and try to send
+  }
+}
 
 /**
  * Get tasks due today for a specific user
@@ -217,9 +268,10 @@ function formatMorningDigest(tasks, userName) {
 /**
  * Send morning digest to a specific user
  * @param {string} azureUserId - Azure AD user ID
+ * @param {boolean} forceMode - If true, skip time and duplicate checks (for manual testing)
  * @returns {Promise<boolean>} True if sent successfully
  */
-async function sendUserMorningDigest(azureUserId) {
+async function sendUserMorningDigest(azureUserId, forceMode = false) {
   try {
     // Get user's Slack connection
     const slackMapping = await storage.getSlackUserMapping(azureUserId);
@@ -233,6 +285,22 @@ async function sendUserMorningDigest(azureUserId) {
     if (!preferences?.morningDigestEnabled) {
       console.log(`User ${azureUserId} has morning digest disabled, skipping`);
       return false;
+    }
+
+    // Skip time checks if in force mode (for testing)
+    if (!forceMode) {
+      // Check if it's the user's preferred digest time in their timezone
+      if (!isDigestTime(preferences)) {
+        // Not the right time for this user yet
+        return false;
+      }
+
+      // Check if we already sent digest today
+      const alreadySent = await wasDigestSentToday(azureUserId, preferences.timezone || 'America/New_York');
+      if (alreadySent) {
+        console.log(`Digest already sent today for user ${azureUserId}, skipping`);
+        return false;
+      }
     }
 
     // Get tasks due today
@@ -252,6 +320,9 @@ async function sendUserMorningDigest(azureUserId) {
       blocks,
       text
     );
+
+    // Mark digest as sent for today (prevent duplicates)
+    await storage.setLastDigestSentTime(azureUserId, new Date().toISOString());
 
     console.log(`Sent morning digest to user ${azureUserId} (${tasks.length} tasks)`);
     return true;

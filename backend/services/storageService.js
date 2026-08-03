@@ -186,6 +186,10 @@ async function getAllSlackUserMappings() {
     if (entity.refreshToken) {
       entity.refreshToken = decrypt(entity.refreshToken);
     }
+
+    // Map rowKey to azureUserId for consuming code
+    entity.azureUserId = entity.rowKey;
+
     entities.push(entity);
   }
 
@@ -242,10 +246,16 @@ async function getNotificationPreferences(azureUserId) {
  * Save notification preferences
  */
 async function saveNotificationPreferences(azureUserId, preferences) {
+  // Merge with defaults to ensure all required fields are set
+  const fullPreferences = {
+    ...DEFAULT_PREFERENCES,
+    ...preferences
+  };
+
   const entity = {
     partitionKey: 'notificationPrefs',
     rowKey: azureUserId,
-    ...preferences,
+    ...fullPreferences,
     updatedAt: new Date().toISOString()
   };
 
@@ -457,6 +467,92 @@ async function setLastTaskCheckTime(azureUserId, timestamp) {
   await taskCheckClient.upsertEntity(entity);
 }
 
+/**
+ * Get the last time we checked for new task assignments for a user
+ * @param {string} azureUserId
+ * @returns {Promise<string|null>} ISO timestamp of last assignment check, or null if never checked
+ */
+async function getLastAssignmentCheckTime(azureUserId) {
+  try {
+    const entity = await taskCheckClient.getEntity('taskCheck', azureUserId);
+    return entity.lastAssignmentCheckTime || null;
+  } catch (error) {
+    if (error.statusCode === 404) {
+      return null; // Never checked before
+    }
+    throw error;
+  }
+}
+
+/**
+ * Set the last time we checked for new task assignments for a user
+ * @param {string} azureUserId
+ * @param {string} timestamp - ISO timestamp
+ */
+async function setLastAssignmentCheckTime(azureUserId, timestamp) {
+  try {
+    // Get existing entity first to preserve other fields
+    const existing = await taskCheckClient.getEntity('taskCheck', azureUserId);
+    existing.lastAssignmentCheckTime = timestamp;
+    await taskCheckClient.upsertEntity(existing);
+  } catch (error) {
+    if (error.statusCode === 404) {
+      // Create new entity
+      const entity = {
+        partitionKey: 'taskCheck',
+        rowKey: azureUserId,
+        lastAssignmentCheckTime: timestamp
+      };
+      await taskCheckClient.upsertEntity(entity);
+    } else {
+      throw error;
+    }
+  }
+}
+
+/**
+ * Get the last time we sent a morning digest to a user
+ * @param {string} azureUserId
+ * @returns {Promise<string|null>} ISO timestamp of last digest, or null if never sent
+ */
+async function getLastDigestSentTime(azureUserId) {
+  try {
+    const entity = await taskCheckClient.getEntity('taskCheck', azureUserId);
+    return entity.lastDigestSentTime || null;
+  } catch (error) {
+    if (error.statusCode === 404) {
+      return null; // Never sent before
+    }
+    throw error;
+  }
+}
+
+/**
+ * Set the last time we sent a morning digest to a user
+ * @param {string} azureUserId
+ * @param {string} timestamp - ISO timestamp
+ */
+async function setLastDigestSentTime(azureUserId, timestamp) {
+  try {
+    // Get existing entity first to preserve other fields
+    const existing = await taskCheckClient.getEntity('taskCheck', azureUserId);
+    existing.lastDigestSentTime = timestamp;
+    await taskCheckClient.upsertEntity(existing);
+  } catch (error) {
+    if (error.statusCode === 404) {
+      // Create new entity
+      const entity = {
+        partitionKey: 'taskCheck',
+        rowKey: azureUserId,
+        lastDigestSentTime: timestamp
+      };
+      await taskCheckClient.upsertEntity(entity);
+    } else {
+      throw error;
+    }
+  }
+}
+
 // ============================================================================
 // EXPORTS
 // ============================================================================
@@ -489,6 +585,10 @@ module.exports = {
   // Task Check Tracking
   getLastTaskCheckTime,
   setLastTaskCheckTime,
+  getLastAssignmentCheckTime,
+  setLastAssignmentCheckTime,
+  getLastDigestSentTime,
+  setLastDigestSentTime,
 
   // Table names (for reference)
   TABLES

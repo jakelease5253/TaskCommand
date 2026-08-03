@@ -8,6 +8,7 @@ const storage = require('./services/storageService');
 const slackCommands = require('./services/slackCommands');
 const taskPollingService = require('./services/taskPollingService');
 const morningDigestService = require('./services/morningDigestService');
+const { getTaskComments, addTaskComment } = require('./services/commentService');
 
 /**
  * Azure Function: Get Company Tasks
@@ -607,8 +608,12 @@ app.http('GetSlackConnectionStatus', {
       const user = await validateUserToken(userToken);
       const azureUserId = user.id;
 
+      context.log('Checking Slack connection for Azure user ID:', azureUserId);
+      context.log('User object:', JSON.stringify(user, null, 2));
+
       // Check if user has Slack connected
       const slackMapping = await storage.getSlackUserMapping(azureUserId);
+      context.log('Slack mapping found:', !!slackMapping);
 
       if (!slackMapping) {
         return {
@@ -1039,6 +1044,138 @@ app.http('SlackCommands', {
   }
 });
 
+/**
+ * Azure Function: Task Comments
+ *
+ * Endpoint: GET/POST /api/tasks/{taskId}/comments
+ * Auth: Anonymous (consider adding auth in production)
+ *
+ * Manages comments for Planner tasks via conversation threads
+ */
+app.http('TaskComments', {
+  methods: ['GET', 'POST', 'OPTIONS'],
+  route: 'tasks/{taskId}/comments',
+  authLevel: 'anonymous',
+  handler: async (request, context) => {
+    context.log('Task Comments API called');
+
+    // CORS headers
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGINS || '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true',
+      'Content-Type': 'application/json'
+    };
+
+    // Handle preflight requests
+    if (request.method === 'OPTIONS') {
+      return {
+        status: 200,
+        headers: corsHeaders
+      };
+    }
+
+    try {
+      const taskId = request.params.taskId;
+      const planId = request.query.get('planId');
+
+      if (!taskId) {
+        return {
+          status: 400,
+          headers: corsHeaders,
+          jsonBody: { error: 'Task ID is required' }
+        };
+      }
+
+      if (!planId) {
+        return {
+          status: 400,
+          headers: corsHeaders,
+          jsonBody: { error: 'Plan ID is required' }
+        };
+      }
+
+      // GET - Fetch comments
+      if (request.method === 'GET') {
+        const comments = await getTaskComments(taskId, planId);
+
+        return {
+          status: 200,
+          headers: corsHeaders,
+          jsonBody: {
+            success: true,
+            comments
+          }
+        };
+      }
+
+      // POST - Add comment
+      if (request.method === 'POST') {
+        const body = await request.json();
+        const commentText = body.comment;
+
+        if (!commentText) {
+          return {
+            status: 400,
+            headers: corsHeaders,
+            jsonBody: { error: 'Comment text is required' }
+          };
+        }
+
+        // Extract user token from Authorization header (for delegated permissions)
+        const authHeader = request.headers.get('authorization');
+        const userToken = authHeader?.startsWith('Bearer ')
+          ? authHeader.substring(7)
+          : null;
+
+        context.log('User token present:', !!userToken);
+        if (userToken) {
+          // Decode token to see scopes (just for debugging)
+          const tokenParts = userToken.split('.');
+          if (tokenParts.length === 3) {
+            const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
+            context.log('Token scopes:', payload.scp || payload.roles || 'none');
+          }
+        }
+
+        const newComment = await addTaskComment(taskId, planId, commentText, userToken);
+
+        return {
+          status: 201,
+          headers: corsHeaders,
+          jsonBody: {
+            success: true,
+            comment: newComment
+          }
+        };
+      }
+
+      // Method not allowed
+      return {
+        status: 405,
+        headers: corsHeaders,
+        jsonBody: { error: 'Method not allowed' }
+      };
+
+    } catch (error) {
+      context.error('Error in task comments API:', error);
+
+      // Preserve the original status code if it's a GraphError
+      const statusCode = error.statusCode || 500;
+
+      return {
+        status: statusCode,
+        headers: corsHeaders,
+        jsonBody: {
+          error: error.code || 'Failed to process comments',
+          message: error.message
+        }
+      };
+    }
+  }
+});
+
 // ============================================================================
 // TIMER FUNCTIONS
 // ============================================================================
@@ -1072,10 +1209,11 @@ app.timer('CheckTaskAssignments', {
  * Sends daily morning digest to all users who have opted in
  * Shows tasks due today and overdue tasks
  *
- * Schedule: Daily at 8:00 AM
+ * Schedule: Every hour (checks each user's timezone and preferred time)
+ * Note: Runs hourly to respect each user's timezone and configured delivery time
  */
 app.timer('SendMorningDigest', {
-  schedule: '0 0 8 * * *',
+  schedule: '0 0 * * * *', // Every hour at the top of the hour
   handler: async (myTimer, context) => {
     context.log('SendMorningDigest timer function started');
 
@@ -1137,7 +1275,7 @@ app.http('TestMorningDigest', {
 
       // Send morning digest to this user
       context.log(`Manually triggering morning digest for user ${userId}`);
-      const sent = await morningDigestService.sendUserMorningDigest(userId);
+      const sent = await morningDigestService.sendUserMorningDigest(userId, true); // forceMode = true for manual testing
 
       return {
         status: 200,

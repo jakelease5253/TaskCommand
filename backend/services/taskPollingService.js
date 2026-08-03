@@ -36,8 +36,8 @@ async function checkUserTaskAssignments(azureUserId) {
       return 0;
     }
 
-    // Get last check time for this user
-    const lastCheck = await storage.getLastTaskCheckTime(azureUserId);
+    // Get last assignment check time for this user
+    const lastCheck = await storage.getLastAssignmentCheckTime(azureUserId);
     const lastCheckTime = lastCheck ? new Date(lastCheck) : new Date(Date.now() - 24 * 60 * 60 * 1000); // Default to 24 hours ago
 
     // Get all tasks assigned to the user
@@ -88,8 +88,8 @@ async function checkUserTaskAssignments(azureUserId) {
       }
     }
 
-    // Update last check time
-    await storage.setLastTaskCheckTime(azureUserId, new Date().toISOString());
+    // Update last assignment check time
+    await storage.setLastAssignmentCheckTime(azureUserId, new Date().toISOString());
 
     return newAssignmentCount;
 

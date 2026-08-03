@@ -1,4 +1,3 @@
-import React from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 
 export default function TerminalIcon({ size = 60, onClick, className = '' }) {

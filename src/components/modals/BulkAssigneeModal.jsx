@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Users } from '../ui/icons';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -21,6 +21,8 @@ export default function BulkAssigneeModal({
     if (isOpen && accessToken) {
       fetchUsers();
     }
+    // Fetch only when the modal opens, not when the selection changes mid-edit
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, accessToken]);
 
   const fetchUsers = async () => {

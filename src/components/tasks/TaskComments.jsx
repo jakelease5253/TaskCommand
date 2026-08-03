@@ -19,6 +19,7 @@ export default function TaskComments({ task }) {
     if (task?.id && task?.planId) {
       fetchComments();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task?.id, task?.planId]);
 
   const fetchComments = async () => {

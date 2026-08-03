@@ -1,4 +1,3 @@
-import React from "react";
 import { GripVertical, Edit, X, Calendar, Folder } from "../ui/icons";
 
 export default function TaskCard({

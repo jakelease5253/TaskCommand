@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, Calendar } from '../ui/icons';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -133,7 +133,7 @@ export default function BulkDueDateModal({
               marginTop: '8px',
               margin: 0
             }}>
-              Leave empty and click "Clear Due Date" to remove due dates
+              Leave empty and click &quot;Clear Due Date&quot; to remove due dates
             </p>
           </div>
 

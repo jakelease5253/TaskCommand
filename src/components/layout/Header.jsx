@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { BarChart, RefreshCw, LogOut, Users, ChevronDown, Target, Calendar } from "../ui/icons";
 import TaskCommandLogo from "../ui/TaskCommandLogo";
 import { useTheme } from "../../contexts/ThemeContext";

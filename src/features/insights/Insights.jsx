@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { TrendingUp, Clock, Target, CheckCircle, AlertCircle, BarChart } from '../../components/ui/icons';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -6,8 +6,7 @@ export default function Insights({
   tasks = [],
   completedTasksHistory = [],
   priorityQueue = [],
-  plans = {},
-  taskFocusTimes = {}
+  plans = {}
 }) {
   const { theme } = useTheme();
   const colors = theme.colors;

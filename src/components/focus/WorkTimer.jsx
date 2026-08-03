@@ -1,4 +1,3 @@
-import React from "react";
 import { Play, Pause, Square, Clock } from "../ui/icons";
 
 export default function WorkTimer({

@@ -1,11 +1,10 @@
-import React, { useState } from "react";
-import { Target, Calendar, Clock, Folder, Edit, Check, AlertCircle, Zap } from "../ui/icons";
+import { useState } from "react";
+import { Target, Folder, Edit, Check, AlertCircle, Zap } from "../ui/icons";
 import ChecklistEditor from "../tasks/ChecklistEditor";
 
 export default function FocusTaskCard({
   task,
   checklist = {},
-  detailsEtag,
   accessToken,
   elapsed,
   planName,
@@ -14,7 +13,6 @@ export default function FocusTaskCard({
   onEdit,
   onUnfocus,
   onEnterFocusMode,
-  formatTime,
   onChecklistUpdate,
 }) {
   const [updatingChecklist, setUpdatingChecklist] = useState(false);
@@ -111,21 +109,6 @@ export default function FocusTaskCard({
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     return dueDate < today && task.percentComplete < 100;
-  };
-
-  const getPriorityLabel = (priority) => {
-    const labels = { 1: 'Urgent', 3: 'Important', 5: 'Medium', 9: 'Low' };
-    return labels[priority] || 'Medium';
-  };
-
-  const getPriorityColor = (priority) => {
-    const colors = {
-      1: 'bg-red-100 text-red-700',
-      3: 'bg-orange-100 text-orange-700',
-      5: 'bg-blue-100 text-blue-700',
-      9: 'bg-slate-100 text-slate-700'
-    };
-    return colors[priority] || 'bg-blue-100 text-blue-700';
   };
 
   const daysUntil = getDaysUntilDue(task);

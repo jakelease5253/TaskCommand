@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { getTheme, defaultTheme } from '../constants/themes';
+import { createContext, useContext, useState, useEffect } from 'react';
+import { getTheme } from '../constants/themes';
 
 const ThemeContext = createContext();
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useTheme = () => {
   const context = useContext(ThemeContext);
   if (!context) {

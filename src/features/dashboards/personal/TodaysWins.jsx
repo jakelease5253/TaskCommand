@@ -1,11 +1,9 @@
-import React from 'react';
 import { Target, Clock, Watch, Flame, Trophy, TrendingUp } from '../../../components/ui/icons';
 
 export default function TodaysWins({
   metrics,
   isCollapsed = false,
   onToggleCollapse,
-  onOpenSettings,
   workHours,
 }) {
   const {
@@ -208,7 +206,7 @@ export default function TodaysWins({
       {/* Header with Title and Collapse Button */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
         <h2 style={{ fontFamily: 'Poppins', fontSize: '16px', fontWeight: '600', color: 'var(--theme-primary-dark)', marginLeft: '3px' }}>
-          Today's Wins
+          Today&apos;s Wins
         </h2>
         {onToggleCollapse && (
           <button
@@ -279,7 +277,7 @@ export default function TodaysWins({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
             <Clock size={28} style={{ color: 'var(--theme-primary-dark)' }} />
             <span style={{ fontFamily: 'Poppins', fontSize: '15px', fontWeight: '600', color: 'var(--theme-primary-dark)' }}>
-              Today's Focus Time
+              Today&apos;s Focus Time
             </span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>

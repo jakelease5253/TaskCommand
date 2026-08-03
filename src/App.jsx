@@ -144,6 +144,41 @@ function App() {
     }
   }, []);
 
+  // Deep links: Slack "View Task" buttons open /?task=<id>, and OAuth
+  // redirects use ?view=<name>. The login round-trip drops the query string
+  // (the authorize redirect returns to the bare origin), so stash the task
+  // id in sessionStorage and consume it once tasks have loaded. Only the
+  // task param is stripped from the URL here - Settings reads and cleans
+  // its own slack_connected/slack_error params.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const taskId = params.get('task');
+    const view = params.get('view');
+    if (taskId) {
+      sessionStorage.setItem('taskcommand_pending_task', taskId);
+      params.delete('task');
+      const search = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (search ? `?${search}` : ''));
+    }
+    if (view && ['personal', 'planning', 'insights', 'manager', 'settings'].includes(view)) {
+      setCurrentView(view);
+    }
+  }, []);
+
+  useEffect(() => {
+    const pendingTaskId = sessionStorage.getItem('taskcommand_pending_task');
+    if (!pendingTaskId || taskManager.tasks.length === 0) return;
+    sessionStorage.removeItem('taskcommand_pending_task');
+    const task = taskManager.tasks.find((t) => t.id === pendingTaskId);
+    if (task) {
+      setCurrentView('personal');
+      handleEditTask(task);
+    }
+    // Consume the pending id on the first load with tasks, whether or not
+    // it matched - a stale id must not pop a modal days later.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskManager.tasks]);
+
   // Save current view to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem('taskcommand_current_view', currentView);

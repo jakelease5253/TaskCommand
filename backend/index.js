@@ -1303,6 +1303,27 @@ app.http('TaskComments', {
         };
       }
 
+      // Comments expose group conversation threads, so both reads and
+      // writes require a validated user token - never anonymous access
+      const authHeader = request.headers.get('authorization');
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return {
+          status: 401,
+          headers: corsHeaders,
+          jsonBody: { error: 'Unauthorized', message: 'Authorization header with Bearer token required' }
+        };
+      }
+      const userToken = authHeader.substring(7);
+      try {
+        await validateUserToken(userToken);
+      } catch {
+        return {
+          status: 401,
+          headers: corsHeaders,
+          jsonBody: { error: 'Unauthorized', message: 'Invalid or expired token' }
+        };
+      }
+
       // GET - Fetch comments
       if (request.method === 'GET') {
         const comments = await getTaskComments(taskId, planId);
@@ -1330,22 +1351,8 @@ app.http('TaskComments', {
           };
         }
 
-        // Extract user token from Authorization header (for delegated permissions)
-        const authHeader = request.headers.get('authorization');
-        const userToken = authHeader?.startsWith('Bearer ')
-          ? authHeader.substring(7)
-          : null;
-
-        context.log('User token present:', !!userToken);
-        if (userToken) {
-          // Decode token to see scopes (just for debugging)
-          const tokenParts = userToken.split('.');
-          if (tokenParts.length === 3) {
-            const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
-            context.log('Token scopes:', payload.scp || payload.roles || 'none');
-          }
-        }
-
+        // Post with the caller's delegated token so the comment is
+        // attributed to them (validated above)
         const newComment = await addTaskComment(taskId, planId, commentText, userToken);
 
         return {

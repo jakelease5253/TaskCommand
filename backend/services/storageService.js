@@ -13,9 +13,13 @@ const TABLES = {
   TASK_CHECK_TRACKING: 'TaskCheckTracking'
 };
 
-// Encryption key for sensitive data (tokens)
-// In production, this should be stored in Azure Key Vault
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'development-key-32-characters!!';
+// Encryption key for sensitive data (tokens). Refuse to start without one -
+// a silent fallback to a publicly-known dev key would encrypt production
+// Slack tokens with a value anyone can read in this repo's history.
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
+if (!ENCRYPTION_KEY) {
+  throw new Error('ENCRYPTION_KEY must be set (see local.settings.json.template for local dev)');
+}
 
 // Initialize table clients
 const slackMappingsClient = TableClient.fromConnectionString(connectionString, TABLES.SLACK_USER_MAPPINGS);
@@ -421,7 +425,9 @@ async function saveMessageTaskLink(taskId, messageData) {
 async function getMessageLinksForTask(taskId) {
   const entities = [];
   const iterator = messageLinksClient.listEntities({
-    queryOptions: { filter: `PartitionKey eq '${taskId}'` }
+    // Escape single quotes per OData rules - taskId reaches this filter
+    // from request input, so it must not be able to break out of the string
+    queryOptions: { filter: `PartitionKey eq '${String(taskId).replace(/'/g, "''")}'` }
   });
 
   for await (const entity of iterator) {
@@ -485,29 +491,51 @@ async function getLastAssignmentCheckTime(azureUserId) {
 }
 
 /**
+ * Merge fields into a user's task-check entity with etag protection.
+ *
+ * The assignment-check and digest-sent timestamps share one entity; the old
+ * get-then-upsert of the full entity let concurrent writers clobber each
+ * other's field. Merge-with-etag updates only the given fields and retries
+ * on conflict.
+ */
+async function patchTaskCheckEntity(azureUserId, fields) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const existing = await taskCheckClient.getEntity('taskCheck', azureUserId);
+      await taskCheckClient.updateEntity(
+        { partitionKey: 'taskCheck', rowKey: azureUserId, ...fields },
+        'Merge',
+        { etag: existing.etag }
+      );
+      return;
+    } catch (error) {
+      if (error.statusCode === 404) {
+        try {
+          await taskCheckClient.createEntity({
+            partitionKey: 'taskCheck',
+            rowKey: azureUserId,
+            ...fields
+          });
+          return;
+        } catch (createError) {
+          if (createError.statusCode === 409) continue; // created concurrently - retry merge
+          throw createError;
+        }
+      }
+      if (error.statusCode === 412) continue; // etag conflict - re-read and retry
+      throw error;
+    }
+  }
+  throw new Error(`Failed to update task-check entity for ${azureUserId} after 3 attempts`);
+}
+
+/**
  * Set the last time we checked for new task assignments for a user
  * @param {string} azureUserId
  * @param {string} timestamp - ISO timestamp
  */
 async function setLastAssignmentCheckTime(azureUserId, timestamp) {
-  try {
-    // Get existing entity first to preserve other fields
-    const existing = await taskCheckClient.getEntity('taskCheck', azureUserId);
-    existing.lastAssignmentCheckTime = timestamp;
-    await taskCheckClient.upsertEntity(existing);
-  } catch (error) {
-    if (error.statusCode === 404) {
-      // Create new entity
-      const entity = {
-        partitionKey: 'taskCheck',
-        rowKey: azureUserId,
-        lastAssignmentCheckTime: timestamp
-      };
-      await taskCheckClient.upsertEntity(entity);
-    } else {
-      throw error;
-    }
-  }
+  await patchTaskCheckEntity(azureUserId, { lastAssignmentCheckTime: timestamp });
 }
 
 /**
@@ -533,24 +561,7 @@ async function getLastDigestSentTime(azureUserId) {
  * @param {string} timestamp - ISO timestamp
  */
 async function setLastDigestSentTime(azureUserId, timestamp) {
-  try {
-    // Get existing entity first to preserve other fields
-    const existing = await taskCheckClient.getEntity('taskCheck', azureUserId);
-    existing.lastDigestSentTime = timestamp;
-    await taskCheckClient.upsertEntity(existing);
-  } catch (error) {
-    if (error.statusCode === 404) {
-      // Create new entity
-      const entity = {
-        partitionKey: 'taskCheck',
-        rowKey: azureUserId,
-        lastDigestSentTime: timestamp
-      };
-      await taskCheckClient.upsertEntity(entity);
-    } else {
-      throw error;
-    }
-  }
+  await patchTaskCheckEntity(azureUserId, { lastDigestSentTime: timestamp });
 }
 
 // ============================================================================

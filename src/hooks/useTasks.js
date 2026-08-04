@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { graphRequest, patchPlannerTask, GraphApiError } from '../services/plannerApi';
 
+const isTokenExpired = (err) => err instanceof GraphApiError && err.status === 401;
+
 export function useTasks(accessToken) {
   const [tasks, setTasks] = useState([]);
   const [plans, setPlans] = useState({});
@@ -15,25 +17,50 @@ export function useTasks(accessToken) {
     setLoading(true);
     setError(null);
     try {
-      // Fetch plans
-      const groupsData = await graphRequest(accessToken, '/me/planner/plans');
-      const plansMap = {};
-      groupsData.value.forEach(plan => {
-        plansMap[plan.id] = plan.title;
-      });
-      setPlans(plansMap);
-
-      // Fetch buckets for each plan
-      const bucketsMap = {};
-      for (const planId of Object.keys(plansMap)) {
-        const bucketsData = await graphRequest(accessToken, `/planner/plans/${planId}/buckets`);
-        bucketsMap[planId] = bucketsData.value;
-      }
-      setBuckets(bucketsMap);
-
-      // Fetch tasks
+      // Tasks are the payload the app can't work without, so fetch them
+      // first. Plans and buckets only supply display names, and Planner
+      // routinely hands back plans we can enumerate but not read (stale
+      // group membership, guest access) - those 403. Fetching tasks up
+      // front keeps one unreadable plan from emptying the whole list.
       const tasksData = await graphRequest(accessToken, '/me/planner/tasks');
       setTasks(tasksData.value || []);
+
+      // Fetch plans
+      const plansMap = {};
+      try {
+        const groupsData = await graphRequest(accessToken, '/me/planner/plans');
+        (groupsData.value || []).forEach(plan => {
+          plansMap[plan.id] = plan.title;
+        });
+      } catch (err) {
+        if (isTokenExpired(err)) throw err;
+        console.warn('Could not load plans:', err.message);
+      }
+      setPlans(plansMap);
+
+      // Fetch buckets for each plan, concurrently. A plan we lack
+      // permission on is skipped with an empty bucket list rather than
+      // failing the load - callers already fall back to the raw bucketId.
+      const planIds = Object.keys(plansMap);
+      const bucketResults = await Promise.allSettled(
+        planIds.map(planId =>
+          graphRequest(accessToken, `/planner/plans/${planId}/buckets`)
+        )
+      );
+      const bucketsMap = {};
+      bucketResults.forEach((result, i) => {
+        if (result.status === 'fulfilled') {
+          bucketsMap[planIds[i]] = result.value?.value || [];
+        } else {
+          if (isTokenExpired(result.reason)) throw result.reason;
+          bucketsMap[planIds[i]] = [];
+          console.warn(
+            `Could not load buckets for plan ${planIds[i]}:`,
+            result.reason?.message
+          );
+        }
+      });
+      setBuckets(bucketsMap);
 
       // Fetch user profiles for assigned users
       const userIds = new Set();
@@ -56,7 +83,7 @@ export function useTasks(accessToken) {
       setUserProfiles(profiles);
     } catch (err) {
       // Expired token: clear auth and start over
-      if (err instanceof GraphApiError && err.status === 401) {
+      if (isTokenExpired(err)) {
         console.log('Token expired, clearing authentication...');
         localStorage.removeItem('taskcommand_access_token');
         window.location.reload();

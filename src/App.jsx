@@ -538,8 +538,10 @@ function App() {
     }
   };
 
-  const handleBulkPriority = async (priority) => {
-    const idsArray = Array.from(selectedTaskIds);
+  const handleBulkPriority = async (taskIds, priority) => {
+    const idsArray = Array.isArray(taskIds) ? taskIds : Array.from(taskIds);
+    if (idsArray.length === 0) return;
+
     const { successfulIds, failedIds, errors } = await forEachTask(idsArray, (taskId) =>
       patchPlannerTask(auth.accessToken, taskId, { priority })
     );
@@ -1077,7 +1079,7 @@ function App() {
             selectedCount={selectedTaskIds.size}
             onClearSelection={handleClearSelection}
             onBulkComplete={() => handleBulkComplete(selectedTaskIds)}
-            onBulkPriority={handleBulkPriority}
+            onBulkPriority={(priority) => handleBulkPriority(selectedTaskIds, priority)}
             onBulkDueDate={() => setShowBulkDueDateModal(true)}
             onBulkAssignee={() => setShowBulkAssigneeModal(true)}
             onBulkMove={() => setShowBulkMoveModal(true)}

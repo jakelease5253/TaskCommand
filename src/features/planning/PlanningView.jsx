@@ -1157,7 +1157,7 @@ export default function PlanningView({
           handleClearSelection();
         }}
         onBulkPriority={(priority) => {
-          onBulkPriority(priority);
+          onBulkPriority(selectedTaskIds, priority);
           handleClearSelection();
         }}
         onBulkDueDate={() => setShowBulkDueDateModal(true)}

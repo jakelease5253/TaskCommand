@@ -311,7 +311,7 @@ export default function PlanningView({
                   e.currentTarget.style.borderColor = '#d1d5db';
                 }}
               >
-                Edit Goals
+                Edit Goals &amp; Schedule
               </button>
             )}
           </div>

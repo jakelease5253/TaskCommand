@@ -14,13 +14,14 @@ export default function TaskComments({ task }) {
   const [newComment, setNewComment] = useState('');
   const [posting, setPosting] = useState(false);
 
-  // Fetch comments when component mounts
+  // Fetch comments when component mounts (needs the token - the comments
+  // API requires an authenticated user for reads as well as writes)
   useEffect(() => {
-    if (task?.id && task?.planId) {
+    if (task?.id && task?.planId && accessToken) {
       fetchComments();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [task?.id, task?.planId]);
+  }, [task?.id, task?.planId, accessToken]);
 
   const fetchComments = async () => {
     try {
@@ -29,7 +30,8 @@ export default function TaskComments({ task }) {
 
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:7071';
       const response = await fetch(
-        `${backendUrl}/api/tasks/${task.id}/comments?planId=${task.planId}`
+        `${backendUrl}/api/tasks/${task.id}/comments?planId=${task.planId}`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
       );
 
       if (!response.ok) {

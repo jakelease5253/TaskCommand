@@ -40,10 +40,15 @@ async function checkUserTaskAssignments(azureUserId) {
     const lastCheck = await storage.getLastAssignmentCheckTime(azureUserId);
     const lastCheckTime = lastCheck ? new Date(lastCheck) : new Date(Date.now() - 24 * 60 * 60 * 1000); // Default to 24 hours ago
 
+    // Capture the next checkpoint BEFORE fetching - tasks assigned while
+    // this run is processing must land in the next window, not be skipped
+    const checkStartTime = new Date().toISOString();
+
     // Get all tasks assigned to the user
     const tasks = await graphClient.getUserTasks(azureUserId);
 
     let newAssignmentCount = 0;
+    let sendFailures = 0;
 
     // Check each task for new assignments
     for (const task of tasks) {
@@ -84,12 +89,18 @@ async function checkUserTaskAssignments(azureUserId) {
         newAssignmentCount++;
         console.log(`Sent assignment notification to user ${azureUserId} for task ${task.id}`);
       } catch (error) {
+        sendFailures++;
         console.error(`Error sending notification for task ${task.id}:`, error);
       }
     }
 
-    // Update last assignment check time
-    await storage.setLastAssignmentCheckTime(azureUserId, new Date().toISOString());
+    // Only advance the checkpoint when every notification went out - a
+    // failed send keeps the old checkpoint so the task is retried next run
+    if (sendFailures === 0) {
+      await storage.setLastAssignmentCheckTime(azureUserId, checkStartTime);
+    } else {
+      console.warn(`Not advancing assignment checkpoint for ${azureUserId}: ${sendFailures} notification(s) failed`);
+    }
 
     return newAssignmentCount;
 

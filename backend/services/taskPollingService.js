@@ -15,6 +15,62 @@ const slackService = require('./slackService');
 const slackFormatter = require('./slackFormatter');
 const storage = require('./storageService');
 
+// Slack error codes worth retrying. Anything else (invalid_auth, channel_not_found,
+// invalid_blocks, ...) will fail identically forever, so retrying it would freeze
+// the checkpoint and re-notify every healthy task in the window on every run.
+const RETRYABLE_SLACK_ERRORS = new Set([
+  'ratelimited',
+  'service_unavailable',
+  'internal_error',
+  'fatal_error',
+  'request_timeout'
+]);
+
+// Backstop for failures we misclassify as transient: however stuck a checkpoint
+// gets, it advances once it falls this far behind. Bounds any repeat-notify loop
+// to roughly this window instead of forever.
+const MAX_CHECKPOINT_HOLD_MS = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Decide whether a failed send is worth holding the checkpoint for
+ * @param {Error} error
+ * @returns {boolean} true if the failure looks temporary
+ */
+function isTransientSendError(error) {
+  const slackCode = error?.message?.match(/^Slack API error: (\w+)/)?.[1];
+  if (slackCode) {
+    return RETRYABLE_SLACK_ERRORS.has(slackCode);
+  }
+  // No Slack error code means we never got a usable response - network fault,
+  // DNS, timeout. Those do recover, so retry them.
+  return true;
+}
+
+/**
+ * Fetch plan/bucket details for the notification. Purely decorative, so a
+ * missing id or an unreadable plan yields null rather than failing the send.
+ * @param {object} task - Planner task
+ * @returns {Promise<{plan: object|null, bucket: object|null}>}
+ */
+async function getTaskContext(task) {
+  const lookup = async (id, fetcher, label) => {
+    if (!id) return null;
+    try {
+      return await fetcher(id);
+    } catch (error) {
+      console.warn(`Could not load ${label} ${id} for task ${task.id}: ${error.message}`);
+      return null;
+    }
+  };
+
+  const [plan, bucket] = await Promise.all([
+    lookup(task.planId, graphClient.getPlan, 'plan'),
+    lookup(task.bucketId, graphClient.getBucket, 'bucket')
+  ]);
+
+  return { plan, bucket };
+}
+
 /**
  * Check for new task assignments for a specific user
  * @param {string} azureUserId - Azure AD user ID
@@ -48,7 +104,7 @@ async function checkUserTaskAssignments(azureUserId) {
     const tasks = await graphClient.getUserTasks(azureUserId);
 
     let newAssignmentCount = 0;
-    let sendFailures = 0;
+    let retryableFailures = 0;
 
     // Check each task for new assignments
     for (const task of tasks) {
@@ -72,11 +128,9 @@ async function checkUserTaskAssignments(azureUserId) {
       }
 
       // This is a new assignment! Send notification
-      try {
-        // Get plan and bucket details
-        const plan = await graphClient.getPlan(task.planId);
-        const bucket = await graphClient.getBucket(task.bucketId);
+      const { plan, bucket } = await getTaskContext(task);
 
+      try {
         // Format and send Slack message
         const blocks = slackFormatter.formatAssignmentNotification(task, plan, bucket);
         await slackService.sendDirectMessage(
@@ -89,17 +143,30 @@ async function checkUserTaskAssignments(azureUserId) {
         newAssignmentCount++;
         console.log(`Sent assignment notification to user ${azureUserId} for task ${task.id}`);
       } catch (error) {
-        sendFailures++;
-        console.error(`Error sending notification for task ${task.id}:`, error);
+        if (isTransientSendError(error)) {
+          retryableFailures++;
+          console.error(`Error sending notification for task ${task.id} (will retry):`, error);
+        } else {
+          // Retrying would never succeed and would hold the checkpoint back,
+          // re-notifying every other task in this window on every run
+          console.error(`Permanently dropping notification for task ${task.id}:`, error);
+        }
       }
     }
 
-    // Only advance the checkpoint when every notification went out - a
-    // failed send keeps the old checkpoint so the task is retried next run
-    if (sendFailures === 0) {
+    // Measure the hold against the stored checkpoint, not the 24h default a
+    // first-time user falls back to - that would trip the backstop immediately
+    const heldFor = lastCheck ? Date.now() - new Date(lastCheck).getTime() : 0;
+
+    // Hold the checkpoint only for failures that can actually recover - a
+    // permanent failure would otherwise freeze it and re-notify forever
+    if (retryableFailures === 0) {
+      await storage.setLastAssignmentCheckTime(azureUserId, checkStartTime);
+    } else if (heldFor > MAX_CHECKPOINT_HOLD_MS) {
+      console.warn(`Advancing assignment checkpoint for ${azureUserId} despite ${retryableFailures} failure(s): held ${Math.round(heldFor / 60000)} min, past the retry limit`);
       await storage.setLastAssignmentCheckTime(azureUserId, checkStartTime);
     } else {
-      console.warn(`Not advancing assignment checkpoint for ${azureUserId}: ${sendFailures} notification(s) failed`);
+      console.warn(`Not advancing assignment checkpoint for ${azureUserId}: ${retryableFailures} notification(s) failed and will be retried`);
     }
 
     return newAssignmentCount;

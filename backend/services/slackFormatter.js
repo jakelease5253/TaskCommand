@@ -260,6 +260,12 @@ function formatAssignmentNotification(task, plan, bucket) {
   const priorityText = formatPriorityBadge(task.priority);
   const dueDateText = formatDueDate(task.dueDateTime);
 
+  // Plan/bucket are decoration - a task with no bucket, or one whose plan we
+  // can't read, still deserves its notification
+  const context = [];
+  if (plan?.title) context.push(`📋 ${plan.title}`);
+  if (bucket?.name) context.push(`📁 ${bucket.name}`);
+
   return [
     {
       type: 'header',
@@ -276,15 +282,16 @@ function formatAssignmentNotification(task, plan, bucket) {
         text: `*${task.title}*\n${priorityText} • ${dueDateText}`
       }
     },
-    {
+    // Slack rejects a context block with no elements, so drop it entirely
+    ...(context.length > 0 ? [{
       type: 'context',
       elements: [
         {
           type: 'mrkdwn',
-          text: `📋 ${plan.title} • 📁 ${bucket.name}`
+          text: context.join(' • ')
         }
       ]
-    },
+    }] : []),
     {
       type: 'divider'
     },
